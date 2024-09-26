@@ -1,0 +1,4 @@
+
+@abs
+class RedisService:
+    pass
