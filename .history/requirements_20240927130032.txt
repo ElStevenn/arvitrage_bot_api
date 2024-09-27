@@ -1,0 +1,12 @@
+fastapi
+aiohttp
+uvicorn
+pydantic
+requests
+schedule
+pytz
+apscheduler
+numpy
+pandas
+aiohttp
+redis
