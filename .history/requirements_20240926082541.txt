@@ -1,7 +1,0 @@
-fastapi
-aiohttp
-uvicorn
-pydantic
-requests
-schedule
-pytz

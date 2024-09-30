@@ -1,4 +1,0 @@
-
-pr
-class RedisService:
-    pass

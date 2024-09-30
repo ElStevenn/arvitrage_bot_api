@@ -1,4 +1,0 @@
-
-print()
-class RedisService:
-    pass

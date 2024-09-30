@@ -1,4 +1,0 @@
-
-
-class MainServiceLayer():
-    pass
