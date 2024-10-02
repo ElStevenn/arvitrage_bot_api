@@ -69,6 +69,12 @@ class FundingRateChart:
             "market_sentiment": market_sentiment
         }
 
+        # Check for NaN or Inf values in result
+        for key, value in result.items():
+            if isinstance(value, float) and (pd.isna(value) or np.isinf(value)):
+                print(f"Warning: {key} has invalid value ({value}). Replacing with None.")
+                result[key] = None
+
         return result
 
     async def get_8h_variation(self, period: int):
@@ -98,15 +104,28 @@ class FundingRateChart:
     async def get_10m_variation(self, period: int):
         granularity = '1m'
         end_time = period + 10 * 60 * 1000
-        candle_stick_data = await self.bitget_service.get_candlestick_chart(self.symbol, granularity, start_time=period, end_time=end_time)
+        candle_stick_data = await self.bitget_service.get_candlestick_chart(
+            self.symbol, granularity, start_time=period, end_time=end_time
+        )
 
         if not candle_stick_data.any():
-            candle_stick_data = await self.bitget_service.get_candlestick_chart(self.symbol, '4H', start_time=period, end_time=end_time)
-            if not candle_stick_data.any():
-                raise Exception("The chart is not avariable, so i think i shouldn't be possible to access")
-        
-        self.df10m = pd.DataFrame(candle_stick_data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'notional'])
-        
+            raise Exception("The chart is not available.")
+
+        self.df10m = pd.DataFrame(candle_stick_data, columns=[
+            'timestamp', 'open', 'high', 'low', 'close', 'volume', 'notional'
+        ])
+
+        # Ensure numeric data types
+        self.df10m['close'] = pd.to_numeric(self.df10m['close'], errors='coerce')
+
+        # Drop rows with NaN values
+        self.df10m.dropna(subset=['close'], inplace=True)
+
+        # Check if there are enough data points
+        if len(self.df10m) < 2:
+            print("Not enough data points in df10m.")
+            return 0.0
+            
         # Calculate variation
         start_price = self.df10m['open'].iloc[0]
         # end_price = df['close'].iloc[-1]
@@ -117,76 +136,106 @@ class FundingRateChart:
 
 
     async def get_daily_trend(self, period: int) -> Literal[
-            "bullish", "bearish", "neutral", "highly bullish", "highly bearish",
-            "volatile", "sideways", "corrective", "strongly bullish", "strongly bearish"
-        ]:
-            """
-            Analyze the daily trend based on candlestick data and return a trend descriptor.
-            """
-            # Define the time range for one day
-            start_time = period
-            end_time = period + 24 * 60 * 60 * 1000  
+        "bullish", "bearish", "neutral", "highly bullish", "highly bearish",
+        "volatile", "sideways", "corrective", "strongly bullish", "strongly bearish"
+    ]:
+        """
+        Analyze the daily trend based on candlestick data and return a trend descriptor.
+        """
+        # Correctly define the time range for one day
+        end_time = period
+        start_time = period - 24 * 60 * 60 * 1000 
 
-            # Fetch candlestick data for the day at 15-minute intervals
-            granularity = '15m'
-            candle_stick_data = await self.bitget_service.get_candlestick_chart(
-                self.symbol, granularity, start_time=start_time, end_time=end_time
-            )
+        # Fetch candlestick data for the day at 15-minute intervals
+        granularity = '15m'
+        candle_stick_data = await self.bitget_service.get_candlestick_chart(
+            self.symbol, granularity, start_time=start_time, end_time=end_time
+        )
 
-            if not candle_stick_data.any():
-                raise Exception("The chart data is not available for the specified period.")
+        if not candle_stick_data.any():
+            print("No data fetched. Please check the time range and data availability.")
+            return "neutral"
 
-            # Create DataFrame
-            self.dfdialy = pd.DataFrame(candle_stick_data, columns=[
-                'timestamp', 'open', 'high', 'low', 'close', 'volume', 'notional'
-            ])
+        # Create DataFrame
+        self.dfdaily = pd.DataFrame(candle_stick_data, columns=[
+            'timestamp', 'open', 'high', 'low', 'close', 'volume', 'notional'
+        ])
 
-            # Ensure numeric data types
-            for col in ['open', 'high', 'low', 'close', 'volume', 'notional']:
-                self.dfdialy[col] = pd.to_numeric(self.dfdialy[col])
+        # Ensure numeric data types
+        for col in ['open', 'high', 'low', 'close', 'volume', 'notional']:
+            self.dfdaily[col] = pd.to_numeric(self.dfdaily[col], errors='coerce')
 
-            # Calculate price changes
-            self.dfdialy['price_change'] = self.dfdialy['close'].diff()
-            self.dfdialy['price_change_pct'] = self.dfdialy['close'].pct_change() * 100
+        # Drop rows with NaN values
+        self.dfdaily.dropna(subset=['close'], inplace=True)
 
-            # Calculate moving averages
-            self.dfdialy['ma20'] = self.dfdialy['close'].rolling(window=20).mean()
-            self.dfdialy['ma50'] = self.dfdialy['close'].rolling(window=50).mean()
+        # Convert timestamp to datetime
+        self.dfdaily['datetime'] = pd.to_datetime(self.dfdaily['timestamp'], unit='ms')
 
-            # Calculate volatility (standard deviation of price changes)
-            volatility = self.dfdialy['price_change_pct'].std()
+        # Sort the DataFrame by datetime in ascending order
+        self.dfdaily.sort_values('datetime', inplace=True)
+        self.dfdaily.reset_index(drop=True, inplace=True)
 
-            # Determine trend based on moving averages
-            latest_close = self.dfdialy['close'].iloc[-1]
-            latest_ma20 = self.dfdialy['ma20'].iloc[-1]
-            latest_ma50 = self.dfdialy['ma50'].iloc[-1]
+        # Verify data integrity
+        if len(self.dfdaily) == 0:
+            print("No data available after cleaning. Cannot proceed with analysis.")
+            return "neutral"
 
-            # Initialize trend
+        # Calculate price changes
+        self.dfdaily['price_change'] = self.dfdaily['close'].diff()
+        self.dfdaily['price_change_pct'] = self.dfdaily['close'].pct_change() * 100
+
+        # Calculate moving averages with shorter periods
+        self.dfdaily['ma5'] = self.dfdaily['close'].rolling(window=5).mean()
+        self.dfdaily['ma15'] = self.dfdaily['close'].rolling(window=15).mean()
+
+        # Calculate volatility (standard deviation of price changes)
+        volatility = self.dfdaily['price_change_pct'].std()
+
+        # Determine trend based on moving averages
+        latest_close = self.dfdaily['close'].iloc[-1]
+        latest_ma5 = self.dfdaily['ma5'].iloc[-1]
+        latest_ma15 = self.dfdaily['ma15'].iloc[-1]
+
+        # Ensure moving averages are valid
+        if pd.isna(latest_ma5) or pd.isna(latest_ma15):
+            print("Moving averages are NaN. Not enough data points.")
+            return "neutral"
+
+        # Initialize trend
+        trend = "neutral"
+
+        # Define thresholds
+        volatility_threshold = 2.0  # Adjusted volatility threshold
+
+        # Analyze trend
+        if latest_close < latest_ma5 and latest_ma5 < latest_ma15:
+            trend = "strongly bearish"
+        elif latest_close > latest_ma5 and latest_ma5 > latest_ma15:
+            trend = "strongly bullish"
+        elif latest_close < latest_ma5:
+            trend = "bearish"
+        elif latest_close > latest_ma5:
+            trend = "bullish"
+        else:
             trend = "neutral"
 
-            # Define thresholds
-            volatility_threshold = 1.5 
+        # Adjust sideways movement detection
+        if abs(latest_ma5 - latest_ma15) / latest_ma15 < 0.003:
+            trend = "sideways"
 
-            # Analyze trend
-            if latest_close > latest_ma20 > latest_ma50:
-                trend = "strongly bullish"
-            elif latest_close < latest_ma20 < latest_ma50:
-                trend = "strongly bearish"
-            elif latest_close > latest_ma20:
-                trend = "bullish"
-            elif latest_close < latest_ma20:
-                trend = "bearish"
-
-            # Check for sideways movement
-            if abs(latest_ma20 - latest_ma50) / latest_ma50 < 0.01:
-                trend = "sideways"
-
-            # Adjust for volatility
-            if volatility > volatility_threshold:
+        # Adjust for volatility without overriding the trend completely
+        if volatility > volatility_threshold:
+            if "bearish" in trend:
+                trend = "volatile bearish"
+            elif "bullish" in trend:
+                trend = "volatile bullish"
+            else:
                 trend = "volatile"
 
-            # Return the determined trend
-            return trend
+        # Return the determined trend
+        return trend
+
+
 
 
     async def get_weekly_trends(self, period: int) -> Literal[
@@ -292,24 +341,36 @@ class FundingRateChart:
         # Drop any rows with NaN values in 'close'
         self.df10m = self.df10m.dropna(subset=['close'])
 
+        # Remove non-positive prices
+        self.df10m = self.df10m[self.df10m['close'] > 0]
+
         # Calculate log returns
         self.df10m['log_return'] = np.log(self.df10m['close'] / self.df10m['close'].shift(1))
 
         # Drop the first row which will have NaN log_return
         self.df10m = self.df10m.dropna(subset=['log_return'])
 
+        # Ensure there are enough data points
+        if len(self.df10m['log_return']) < 2:
+            print("Not enough data points to calculate volatility.")
+            return None  # or return 0.0
+
         # Calculate the standard deviation of log returns
         volatility = self.df10m['log_return'].std()
 
-        # Since the data is in minutes and over a short period, we can annualize the volatility
-        # For 10-minute data, assuming 1440 minutes per day and 252 trading days per year
-        periods_per_year = 252 * (1440 / 10)
-
         # Annualize the volatility
+        # For 1-minute data, adjust the periods per year accordingly
+        periods_per_year = 252 * (1440)  # 1,440 minutes per day
+
         annualized_volatility = volatility * np.sqrt(periods_per_year)
 
         # Convert volatility to percentage
         volatility_index = annualized_volatility * 100
+
+        # Handle NaN or infinite values
+        if pd.isna(volatility_index) or np.isinf(volatility_index):
+            print("Calculated volatility index is invalid.")
+            return None  # or set to 0.0
 
         return volatility_index
 
@@ -379,6 +440,18 @@ class FundingRateChart:
         weekly_trend = self.weekly_trend
         volatility_index = self.volatility_index  
         average_volume = self.average_trading_volume 
+
+        # Ensure volatility is valid
+        if volatility_index is None:
+            volatility_index = 0.0
+
+        # 3. Volatility Analysis
+        if volatility_index > 50:
+            volatility_sentiment = "uncertain"
+        elif volatility_index < 10:
+            volatility_sentiment = "stable"
+        else:
+            volatility_sentiment = "moderate"
 
         # Recent price changes
         h8_variation = await self.get_8h_variation(period)

@@ -3,6 +3,8 @@ import redis
 import uuid
 import json
 import time
+import re
+import numpy as np
 from typing import List, Literal, Dict, TypedDict, Optional, Tuple
 from datetime import datetime, timezone
 from pprint import pprint
@@ -64,7 +66,6 @@ class RedisService:
                 if len(existing_data["data"]) >= 500:
                     existing_data["data"].pop(0) 
                 existing_data["data"].append(funding_rate_analysis)
-                
             else:
                 existing_data["data"] = [funding_rate_analysis]
             new_data = existing_data
@@ -73,7 +74,7 @@ class RedisService:
 
 
 
-    def add_new_crypto(self, symbol: str, whole_analysis_until_now: List[dict], fr_expiration: Literal['8h', '4h']):
+    def add_new_crypto(self, symbol: str, picture_url, whole_analysis_until_now: List[dict], fr_expiration: Literal['8h', '4h']):
         """
         Creates a new cryptocurrency analysis to the Redis database. If the crypto does not exist, 
         it will create the entry and ensure the number of records is limited to 500.
@@ -100,15 +101,17 @@ class RedisService:
         if crypto_data:
             return  
 
-        # Prepare the data structure for saving, incorporating the 'symbol' and 'period'
+        # Prepare the data structure for saving
         new_entry = {
             "symbol": symbol,
+            "picture_url": picture_url,
             "fr_expiration": fr_expiration,
             "data": whole_analysis_until_now
         }
         self._r.hset("all_crypto_analysis", symbol, json.dumps(new_entry))
-        crypto_list = self._r.get("list_crypto")
 
+        # Update list_crypto
+        crypto_list = self._r.get("list_crypto")
         if crypto_list:
             try:
                 crypto_list = json.loads(crypto_list)
@@ -121,6 +124,43 @@ class RedisService:
         if symbol not in crypto_list:
             crypto_list.append(symbol)
             self._r.set("list_crypto", json.dumps(crypto_list))
+
+    def add_symbol_only(self, symbol: str, name, picture_url: str, description: str):
+            """
+            Adds a new symbol with its picture to the Redis database.
+            """
+            # Check if the symbol already exists
+            existing_data = self._r.hget("all_crypto_analysis", symbol)
+            id = self.add_crypto_offset()
+            if existing_data:
+                return  # Symbol already exists
+
+            # Create a new entry with symbol and picture
+            new_entry = {
+                "id": int(id),
+                "symbol": symbol,
+                "name": name,
+                "picture_url": picture_url,
+                "description": description,
+                "data": [],
+            }
+            self._r.hset("all_crypto_analysis", symbol, json.dumps(new_entry))
+
+            # Add the symbol to the list_crypto
+            crypto_list = self._r.get("list_crypto")
+            if crypto_list:
+                try:
+                    crypto_list = json.loads(crypto_list)
+                except json.JSONDecodeError:
+                    crypto_list = []
+            else:
+                crypto_list = []
+
+            if symbol not in crypto_list:
+                crypto_list.append(symbol)
+                self._r.set("list_crypto", json.dumps(crypto_list))
+
+
 
 
     def read_crypto_analysis(self, symbol: str, limit: int = 20) -> Tuple[list, str]:
@@ -147,7 +187,7 @@ class RedisService:
             raise ValueError("Invalid data format in Redis")
 
 
-    def get_list_cryptos(self) -> list:
+    def get_list_cryptos(self):
         crypto_list = self._r.get("list_crypto")
         
         if crypto_list:
@@ -158,7 +198,89 @@ class RedisService:
         else:
             crypto_list = []
 
-        return crypto_list  
+        return np.array(crypto_list)  
+
+    def get_all_cryptos(self):
+        """
+        Get all cryptos detailed
+        """
+        all_symbols = self.get_list_cryptos()
+
+        result = []
+        for symbol in all_symbols:
+            crypto_data = self.get_crypto_essential(symbol)
+            result.append(crypto_data)
+        
+        return result
+
+    def get_list_query(self, query: Optional[str] = None, limit: Optional[int] = None, offset: Optional[int] = 0) -> List[Dict]:
+        """
+        Retrieves a list of cryptocurrencies based on the provided query with pagination.
+        
+        - If no query is provided, returns all cryptos sorted by 'id' in ascending order.
+        - If a query is provided, searches both 'symbol' and 'name' (case-insensitive).
+          Results are ordered first by those that start with the query, then those that contain it.
+        
+        Args:
+            query (Optional[str]): The search query string.
+            limit (Optional[int]): Number of results to return.
+            offset (Optional[int]): Number of results to skip.
+        
+        Returns:
+            List[Dict]: A list of dictionaries containing cryptocurrency data.
+        """
+        
+        # Fetch all cryptocurrencies
+        all_cryptos = self.get_all_cryptos()
+        
+        if not query:
+            # No query provided; sort all cryptos by 'id' ascending
+            sorted_all = sorted(
+                all_cryptos, 
+                key=lambda x: x.get('id', float('inf')) if isinstance(x.get('id', None), int) else float('inf')
+            )
+        else:
+            # Normalize the query for case-insensitive comparison
+            query_lower = query.lower()
+            
+            starts_with = []
+            contains = []
+            
+            for crypto in all_cryptos:
+                symbol = crypto.get('symbol', '').lower()
+                name = crypto.get('name', '').lower()
+                
+                # Check if 'symbol' or 'name' starts with the query
+                if symbol.startswith(query_lower) or name.startswith(query_lower):
+                    starts_with.append(crypto)
+                # Check if 'symbol' or 'name' contains the query
+                elif query_lower in symbol or query_lower in name:
+                    contains.append(crypto)
+            
+            # Sort each list by 'id' ascending to maintain consistency
+            starts_with_sorted = sorted(
+                starts_with, 
+                key=lambda x: x.get('id', float('inf')) if isinstance(x.get('id', None), int) else float('inf')
+            )
+            contains_sorted = sorted(
+                contains, 
+                key=lambda x: x.get('id', float('inf')) if isinstance(x.get('id', None), int) else float('inf')
+            )
+            
+            # Combine the lists: starts_with first, then contains
+            sorted_all = starts_with_sorted + contains_sorted
+        
+        # Apply offset and limit
+        if offset:
+            sorted_all = sorted_all[offset:]
+        if limit:
+            sorted_all = sorted_all[:limit]
+        
+        return sorted_all
+
+
+
+
 
     def delete_everything(self):
         self._r.flushall()
@@ -178,6 +300,27 @@ class RedisService:
             crypto_list.remove(symbol)
 
             self._r.set("list_crypto", json.dumps(crypto_list))
+
+    def get_crypto_logo(self, symbol: str) -> Tuple[str, str, str]:
+        """
+        Retrieves the picture URL (logo) for the given cryptocurrency symbol.
+        """
+        crypto_data = self._r.hget("all_crypto_analysis", symbol)
+        if not crypto_data:
+            return None
+        crypto_data = json.loads(crypto_data)
+        return crypto_data.get("picture_url", None), crypto_data.get("name", None), crypto_data.get("description", None)
+
+    def get_crypto_essential(self, symbol) -> dict:
+        """
+        Retrives the essential data from a given crypto (name and id)
+        """
+        crypto_data = self._r.hget("all_crypto_analysis", symbol)
+        if not crypto_data:
+            return None
+        crypto_data = json.loads(crypto_data)
+
+        return {"id": crypto_data.get('id', None), "symbol": str(symbol), "name": crypto_data.get('name', None), "image": crypto_data.get('picture_url', None)}
 
     def get_4h_cryptos(self) -> List[str]:
         """Get a list of cryptos with a funding rate expiration time of 4h."""
@@ -204,7 +347,6 @@ class RedisService:
         
         return cryptos_with_8h
 
-
     def expiration_time(self, symbol):
         crypto_data = json.loads(self._r.hget("all_crypto_analysis", symbol))
 
@@ -212,6 +354,19 @@ class RedisService:
             return None
 
         return crypto_data["fr_expiration"]
+
+    def add_crypto_offset(self):
+        """Add 1 to crypto offset"""
+        count = json.loads(self._r.get("crypto_count") or "0")                   
+        if not count:
+            count = 1
+        else:
+            count += 1
+        
+        self._r.set("crypto_count", count)
+
+        return count
+        
 
 ## TESTING & EXAMPLE OF REDIS ## 
 if __name__ == "__main__":
@@ -296,10 +451,11 @@ if __name__ == "__main__":
 
 
     # Call the add_new_crypto method
-    # redis_service.add_new_crypto(symbol, whole_analysis_until_now, '4h')
+    # redis_service.add_new_crypto(symbol, None, whole_analysis_until_now, '4h')
     # print(redis_service.get_list_cryptos())
     # redis_service.delete_everything()
-    # redis_service.delete_crypto(symbol)
+    print(redis_service.get_list_query("bit"))
+    # print(redis_service.get_crypto_logo("BTCUSDT"))
 
     """
     new_period =     {
@@ -313,7 +469,7 @@ if __name__ == "__main__":
     """
     # crypto = redis_service.read_crypto_analysis(symbol)
 
-    print(redis_service.get_4h_cryptos())
+    # print(redis_service.get_4h_cryptos())
     
 
 

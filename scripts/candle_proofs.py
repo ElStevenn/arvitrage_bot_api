@@ -17,6 +17,6 @@ granularity = '1m'
 
 async def make_chart():
     numpy_data  = await bitget_service.get_candlestick_chart('BTCUSDT', granularity, start_time, end_time)
-
+    
 
 asyncio.run(make_chart())

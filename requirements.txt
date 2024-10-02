@@ -11,3 +11,4 @@ pandas
 aiohttp
 redis
 matplotlib
+websockets

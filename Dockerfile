@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 WORKDIR /
 
-RUN pip install --no-cache-dir fastapi aiohttp uvicorn pydantic requests schedule apscheduler pytz numpy pandas python-dotenv redis matplotlib
+RUN pip install --no-cache-dir fastapi aiohttp uvicorn pydantic requests schedule apscheduler pytz numpy pandas python-dotenv redis matplotlib websockets
 
 COPY . .
 

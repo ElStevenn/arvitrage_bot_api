@@ -28,6 +28,20 @@ class ScheduleLayer:
         )
         print(f"Scheduled '{function_to_call.__name__}' at {run_time} in timezone {self.timezone}")
 
+    def schedule_daily_job(self, hour: int, minute: int, function_to_call: Callable[..., Coroutine], *args):
+        self.scheduler.add_job(
+            self._run_async_function,
+            trigger='cron',
+            hour=hour,
+            minute=minute,
+            args=[function_to_call, *args],
+            timezone=self.timezone,
+            coalesce=True,
+            misfire_grace_time=30
+        )
+        print(f"Scheduled '{function_to_call.__name__}' daily at {hour:02d}:{minute:02d} in timezone {self.timezone}")
+
+
     async def _run_async_function(self, function_to_call: Callable[..., Coroutine], *args):
         print(f"Executing function '{function_to_call.__name__}' with args: {args}")
         await function_to_call(*args)
