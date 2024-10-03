@@ -56,9 +56,38 @@ class BitgetService:
 
         return final_result
 
+    async def get_current_funding_rate(self, symbol):
+        url = "https://api.bitget.com/api/v2/mix/market/current-fund-rate"
+        params = {"symbol": symbol, "productType": "USDT-FUTURES"}
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    funding_rate = float(result['data'][0]['fundingRate']) * 100
+                    return round(funding_rate, 4)
+                else:
+                    text_response = await response.text()
+                    raise TypeError(f"An error ocurref with the the API response: {text_response}")
+
+    async def get_last_contract_funding_rate(self, symbol, ans = False):
+        url = "https://api.bitget.com/api/v2/mix/market/history-fund-rate"
+        params = {"symbol": symbol, "productType": "USDT-FUTURES"}
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    funding_rate = float(result['data'][0 if not ans else 1]['fundingRate']) * 100
+                    funding_time = result['data'][0 if not ans else 1]['fundingTime']
+                    return round(funding_rate, 4), funding_time
+                else:
+                    text_response = await response.text()
+                    raise TypeError(f"An error ocurref with the the API response: {text_response}")
+                
     async def get_candlestick_chart_v2(self, symbol):pass
 
-    async def get_crypto_period(self, symbol):
+    async def get_funding_rate_period(self, symbol):
         """Get funding rate period, either 8h or 4h"""
         # STEP 1, get sample data
         url = "https://api.bitget.com/api/v2/mix/market/history-fund-rate?pageSize=3"
@@ -235,6 +264,9 @@ async def main_testing():
 
     bitget_layer = BitgetService()
 
+    print(await bitget_layer.get_current_funding_rate('OMUSDT'))
+
+    """
     granularity = '1H'  
 
     res = await bitget_layer.get_candlestick_chart('BTCUSDT', granularity, start_time, end_time)
@@ -246,6 +278,6 @@ async def main_testing():
     df.to_csv('delete_this.csv', index=False)
 
     print(df)
-    
+    """
 if __name__ == "__main__":
     asyncio.run(main_testing())

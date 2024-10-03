@@ -74,15 +74,15 @@ async def get_today_analysis(symbol: str):
     return analysis
 
 
-@app.get("/get_detail_event/{symbol}", description="Get name and logo of the crypto", tags=["Crypto Search"])
+@app.get("/get_detail_event/{symbol}", description="Get name and logo of the crypto", tags=["Crypto Search"], response_model=Crypto)
 async def get_detail_event(symbol: str):
     try:
-        crypto_logo, name, description = redis_memory.get_crypto_logo(symbol)
+        crypto_logo, name, description, funding_rate_delay = redis_memory.get_crypto_data(symbol)
 
         if symbol.lower().endswith('usdt'):
             symbol = symbol[:-4]
 
-        return {"symbol": symbol, "name": name, "image": crypto_logo, "description": description}
+        return {"symbol": symbol, "name": name, "image": crypto_logo, "description": description, "funding_rate_delay": funding_rate_delay}
     except TypeError:
         raise HTTPException(status_code=404, detail=f"Symbol {symbol} not found")
 
@@ -92,7 +92,7 @@ async def get_detail_event(symbol: str):
     "/search",
     description="Search all the available cryptos in the API",
     tags=["Crypto Search"],
-    response_model=List[Crypto]
+    response_model=List[CryptoSearch]
 )
 async def search_crypto(
     query: Optional[str] = Query(None, description="Search query for symbol or name"),
@@ -107,11 +107,9 @@ async def search_crypto(
     - **offset**: The number of results to skip for pagination (default: 0).
     """
     try:
-        # Fetch the queried data from Redis
+        # Fetch the queried data from Redis and set response
         queried_data = redis_memory.get_list_query(query=query, limit=limit, offset=offset)
-        
-        # Convert to list of Crypto models
-        response = [Crypto(**crypto) for crypto in queried_data]
+        response = [crypto for crypto in queried_data]
         
         return response
     except Exception as e:
