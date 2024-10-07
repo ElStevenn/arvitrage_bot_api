@@ -6,14 +6,14 @@ import time
 import re
 import numpy as np
 from typing import List, Literal, Dict, TypedDict, Optional, Tuple
+from fastapi import HTTPException
 from datetime import datetime, timezone
 from pprint import pprint
 
 class FundingRateAnalysis(TypedDict, total=False):
-    id: uuid.UUID
     period: datetime
     funding_rate_value: float
-    analysis: Optional[dict]
+    analysis: Optional[Dict]
 
 class Analysis(TypedDict, total=False):
     description: List[str]
@@ -21,36 +21,155 @@ class Analysis(TypedDict, total=False):
     ten_minute_variation: float
     one_minute_variation: float
 
+class CryptoMetadata(TypedDict):
+    id: int
+    symbol: str
+    name: str
+    picture_url: str
+    funding_rate_del: str
+    description: str
+
 class RedisService:
     def __init__(self) -> None:
         hostname = socket.gethostname()
-
+        print("HOSTNAME! -> ", hostname)
         if hostname == 'mamadocomputer':
+            # Local machine
             redis_host = 'localhost'
-            port = '6378'
+            port = 6378 
         else: 
-            redis_host = ''
-            port = ''
-        
+            # Server deployment
+            redis_host = 'redis_tasks'  
+            port = 6379
+
         self._r = redis.Redis(host=redis_host, port=port, decode_responses=True)
 
-    # FUNDING RATE
-    def add_analysis_funding_rate(self, symbol: str, funding_rate_analysis: FundingRateAnalysis, ans = False):
+    # ------------------- LIST_CRYPTO FUNCTIONS -------------------
+
+    def get_list_cryptos(self) -> np.ndarray:
         """
-        Adds a new analysis or just a new funding rate attached to the symbol.
-        {
-            "id": uuid,
-            "period": int,
-            "funding_rate_value": float,
-            "analysis": {
-                "description": ["crypto went down by X% in next 8h", "crypto went down by X% by the first minute", ...],
-                "8h_variation": float,
-                "10m_variation": float,
-                "1m_variation": float
-            } | {}
+        Retrieves the list of cryptocurrency symbols as a NumPy array.
+
+        Returns:
+            np.ndarray: Array of cryptocurrency symbols.
+        """
+        crypto_list = self._r.get("list_crypto")
+        if crypto_list:
+            try:
+                crypto_list = json.loads(crypto_list)
+                if isinstance(crypto_list, list):
+                    return np.array(crypto_list)
+            except json.JSONDecodeError:
+                print("Error decoding 'list_crypto' from Redis.")
+                return np.array([])
+        return np.array([])
+
+    def add_to_list_crypto(self, symbol: str):
+        crypto_array = self.get_list_cryptos()
+        crypto_list = crypto_array.tolist()  
+        if symbol not in crypto_list:
+            crypto_list.append(symbol)
+            self._r.set("list_crypto", json.dumps(crypto_list))
+        else:
+            print(f"Symbol '{symbol}' already exists in 'list_crypto'.")
+
+
+    def remove_from_list_crypto(self, symbol: str) -> None:
+        crypto_array = self.get_list_cryptos()
+        crypto_list = crypto_array.tolist() 
+        if symbol in crypto_list:
+            crypto_list.remove(symbol)
+            self._r.set("list_crypto", json.dumps(crypto_list))
+            print(f"Removed symbol '{symbol}' from 'list_crypto'.")
+        else:
+            print(f"Symbol '{symbol}' not found in 'list_crypto'.")
+
+    # ------------------- CRYPTO_METADATA FUNCTIONS -------------------
+
+    def add_crypto_metadata(self, symbol: str, name: str, picture_url: str, description: str, funding_rate_del: str) -> None:
+        """
+        Adds metadata for a new cryptocurrency. Also updates the list_crypto.
+        """
+        # Check if metadata already exists
+        existing_metadata = self._r.hget("crypto_metadata", symbol)
+        if existing_metadata:
+            print(f"Metadata for symbol {symbol} already exists.")
+            return
+
+        # Generate a unique ID for the cryptocurrency
+        crypto_id = self.add_crypto_offset()
+
+        # Create metadata entry
+        metadata_entry: CryptoMetadata = {
+            "id": crypto_id,
+            "symbol": symbol,
+            "name": name,
+            "picture_url": picture_url,
+            "funding_rate_del": funding_rate_del,
+            "description": description
         }
+
+        # Save metadata to Redis
+        self._r.hset("crypto_metadata", symbol, json.dumps(metadata_entry))
+
+        # Add symbol to list_crypto
+        self.add_to_list_crypto(symbol)
+
+    def get_crypto_metadata(self, symbol: str) -> Optional[CryptoMetadata]:
         """
-        # Fetch existing data for the symbol
+        Retrieves metadata for a given cryptocurrency symbol.
+        """
+        metadata_json = self._r.hget("crypto_metadata", symbol)
+        if metadata_json:
+            try:
+                metadata = json.loads(metadata_json)
+                return metadata
+            except json.JSONDecodeError:
+                print(f"Malformed metadata JSON for symbol: {symbol}")
+        return None
+
+    def update_crypto_metadata(self, symbol: str, updates: Dict) -> bool:
+        """
+        Updates metadata fields for a given cryptocurrency symbol.
+        """
+        metadata = self.get_crypto_metadata(symbol)
+        if not metadata:
+            print(f"No metadata found for symbol: {symbol}")
+            return False
+
+        metadata.update(updates)
+        try:
+            self._r.hset("crypto_metadata", symbol, json.dumps(metadata))
+            print(f"Successfully updated metadata for symbol: {symbol}")
+            return True
+        except redis.RedisError as e:
+            print(f"Redis error while updating metadata for symbol {symbol}: {e}")
+            return False
+
+    def delete_crypto_metadata(self, symbol: str) -> bool:
+        """
+        Deletes metadata for a given cryptocurrency symbol.
+        """
+        try:
+            result = self._r.hdel("crypto_metadata", symbol)
+            if result:
+                print(f"Successfully deleted metadata for symbol: {symbol}")
+                self.remove_from_list_crypto(symbol)
+                self.delete_all_analysis_for_symbol(symbol)
+                return True
+            else:
+                print(f"No metadata found for symbol: {symbol}")
+                return False
+        except redis.RedisError as e:
+            print(f"Redis error while deleting metadata for symbol {symbol}: {e}")
+            return False
+
+    # ------------------- ALL_CRYPTO_ANALYSIS FUNCTIONS -------------------
+
+    def add_funding_rate_analysis(self, symbol: str, funding_rate_analysis: FundingRateAnalysis) -> None:
+        """
+        Adds a new funding rate analysis entry for a given cryptocurrency symbol.
+        """
         existing_data = self._r.hget("all_crypto_analysis", symbol)
 
         if not existing_data:
@@ -59,51 +178,40 @@ class RedisService:
                 "data": [funding_rate_analysis]
             }
         else:
-            existing_data = json.loads(existing_data)
-            
-            # Ensure "data" field exists and is a list
-            if "data" in existing_data and isinstance(existing_data["data"], list):
-                if len(existing_data["data"]) >= 500:
-                    existing_data["data"].pop(0) 
-                existing_data["data"].append(funding_rate_analysis)
-            else:
-                existing_data["data"] = [funding_rate_analysis]
-            new_data = existing_data
+            try:
+                existing_data = json.loads(existing_data)
+                if "data" in existing_data and isinstance(existing_data["data"], list):
+                    if len(existing_data["data"]) >= 500:
+                        existing_data["data"].pop(0)  # Maintain a maximum of 500 entries
+                    existing_data["data"].append(funding_rate_analysis)
+                else:
+                    existing_data["data"] = [funding_rate_analysis]
+                new_data = existing_data
+            except json.JSONDecodeError:
+                # If existing data is malformed, reset it
+                new_data = {
+                    "symbol": symbol,
+                    "data": [funding_rate_analysis]
+                }
 
         self._r.hset("all_crypto_analysis", symbol, json.dumps(new_data))
 
     def set_last_analysis(self, symbol: str, analysis_data: Dict) -> bool:
         """
-        Adds an analysis to the pre-last funding rate entry for the given symbol.
-
-        Args:
-            symbol (str): The cryptocurrency symbol to update.
-            analysis_data (Dict): The analysis data to add. It should follow the structure:
-                {
-                    "description": ["description1", "description2", ...],
-                    "eight_hour_variation": float,
-                    "ten_minute_variation": float,
-                    "one_minute_variation": float,
-                    ...
-                }
-
-        Returns:
-            bool: True if the analysis was added successfully, False otherwise.
+        Adds analysis data to the pre-last funding rate entry for the given symbol.
         """
-        # Fetch existing data for the symbol
         crypto_data = self._r.hget("all_crypto_analysis", symbol)
 
         if not crypto_data:
-            print(f"No existing data found for symbol: {symbol}")
+            print(f"No existing analysis data found for symbol: {symbol}")
             return False
 
         try:
             crypto_data = json.loads(crypto_data)
         except json.JSONDecodeError:
-            print(f"Malformed JSON data for symbol: {symbol}")
+            print(f"Malformed analysis JSON data for symbol: {symbol}")
             return False
 
-        # Access the 'data' list containing funding rate analyses
         data_list = crypto_data.get("data")
 
         if not isinstance(data_list, list):
@@ -114,13 +222,11 @@ class RedisService:
             print(f"Not enough funding rate entries to add analysis for symbol: {symbol}")
             return False
 
-        # Get the pre-last entry in the 'data' list
         pre_last_entry = data_list[-2]
 
         if 'analysis' not in pre_last_entry or not isinstance(pre_last_entry['analysis'], dict):
             pre_last_entry['analysis'] = {}
 
-  
         pre_last_entry['analysis'].update(analysis_data)
 
         try:
@@ -128,26 +234,29 @@ class RedisService:
             print(f"Successfully added analysis to pre-last funding rate for symbol: {symbol}")
             return True
         except redis.RedisError as e:
-            print(f"Redis error while updating symbol {symbol}: {e}")
+            print(f"Redis error while updating analysis for symbol {symbol}: {e}")
             return False
 
-
-    
+    def get_funding_rate_history(self, symbol: str, limit: Optional[int] = None) -> Optional[Dict]:
+        """
+        Retrieves the funding rate history for a given cryptocurrency symbol.
+        """
+        crypto_data = self._r.hget("all_crypto_analysis", symbol)
+        if crypto_data:
+            try:
+                json_data = json.loads(crypto_data)
+                if limit:
+                    json_data["data"] = json_data["data"][-limit:]
+                return json_data
+            except json.JSONDecodeError:
+                print(f"Malformed analysis JSON data for symbol: {symbol}")
+                return {}
+        return {}
 
     def get_last_funding_rate(self, symbol: str) -> Tuple[Optional[float], Optional[int], Optional[str]]:
         """
         Retrieves the last registered funding rate for the given symbol.
-
-        Args:
-            symbol (str): The cryptocurrency symbol to query.
-
-        Returns:
-            Tuple[Optional[float], Optional[int], Optional[str]]:
-                - Latest funding rate value (float) or None if not found.
-                - Latest period as Unix timestamp (int) or None if not found.
-                - Latest ID as string or None if not found.
         """
-        # Fetch the data for the specified symbol from Redis
         crypto_data = self._r.hget("all_crypto_analysis", symbol)
         
         if not crypto_data:
@@ -158,217 +267,114 @@ class RedisService:
         except json.JSONDecodeError:
             return None, None, None
         
-        # Access the 'data' list containing funding rate analyses
         data_list = crypto_data.get("data")
         
         if not isinstance(data_list, list) or not data_list:
             return None, None, None
         
-        # Get the last entry in the 'data' list and get needed data
         last_entry = data_list[-1]
         
         funding_rate = last_entry.get("funding_rate_value")
         period_str = last_entry.get("period")
         entry_id = last_entry.get("id")
         
-        # Initialize return values
-        funding_rate_value = None
+        funding_rate_value = float(funding_rate) if isinstance(funding_rate, (float, int)) else None
         period_timestamp = None
-        entry_id_str = None
+        entry_id_str = entry_id if isinstance(entry_id, str) else None
         
-        # Validate and assign funding_rate
-        if isinstance(funding_rate, (float, int)):
-            funding_rate_value = float(funding_rate)
-        
-        # Validate and convert period to Unix timestamp
         if isinstance(period_str, str):
             try:
                 period_dt = datetime.fromisoformat(period_str)
-                period_timestamp = int(period_dt.replace(tzinfo=datetime.utcnow().astimezone().tzinfo).timestamp())
+                period_timestamp = int(period_dt.replace(tzinfo=timezone.utc).timestamp())
             except ValueError:
                 period_timestamp = None
         
-        # Validate and assign entry_id and return
-        if isinstance(entry_id, str):
-            entry_id_str = entry_id
         return funding_rate_value, period_timestamp, entry_id_str
 
-
-
-    # CRYPTOS and BASIC DATA CACHÉ
-    def add_new_crypto(self, symbol: str, picture_url, whole_analysis_until_now: List[dict], fr_expiration: Literal['8h', '4h']):
+    def read_crypto_analysis(self, symbol: str, limit: int = 20) -> Tuple[List[Dict], Optional[str]]:
         """
-        Creates a new cryptocurrency analysis to the Redis database. If the crypto does not exist, 
-        it will create the entry and ensure the number of records is limited to 500.
-
-        whole_analysis_until_now: [
-            "symbol": str
-            "fr_expiration": str,
-            "data": {
-                    "id": uuid,
-                    "period": datetime,
-                    "funding_raste_value": float,
-                    "analysis": {
-                        "description": ["crypto went down by X% in next 8h", "crypto went down by X% by the first minute", ...],
-                        "8h_variation": float,
-                        "10m_variation": float,
-                        "1m_variation": float
-                        ...
-                    } | {}
-                }
-        ]
+        Retrieves the latest 'limit' number of analysis entries for a given symbol.
         """
-
-        crypto_data = self._r.hget("all_crypto_analysis", symbol)
-        if crypto_data:
-            return  
-
-        # Prepare the data structure for saving
-        new_entry = {
-            "symbol": symbol,
-            "picture_url": picture_url,
-            "fr_expiration": fr_expiration,
-            "data": whole_analysis_until_now
-        }
-        self._r.hset("all_crypto_analysis", symbol, json.dumps(new_entry))
-
-        if fr_expiration in ["4h", "8h"]:
-            self._r.sadd(f"fr_expiration:{fr_expiration}", symbol)
-
-        # Update list_crypto
-        crypto_list = self._r.get("list_crypto")
-        if crypto_list:
-            try:
-                crypto_list = json.loads(crypto_list)
-            except json.JSONDecodeError:
-                crypto_list = []
-        else:
-            crypto_list = []
-
-        # Add the symbol if it’s not already in the list
-        if symbol not in crypto_list:
-            crypto_list.append(symbol)
-            self._r.set("list_crypto", json.dumps(crypto_list))
-
-    def add_symbol_only(self, symbol: str, name, picture_url: str, description: str, funding_rate: str):
-            """
-            Adds a new symbol with its picture to the Redis database.
-            """
-            # Check if the symbol already exists
-            existing_data = self._r.hget("all_crypto_analysis", symbol)
-            id = self.add_crypto_offset()
-            if existing_data:
-                return  # Symbol already exists
-
-            # Create a new entry with symbol and picture
-            new_entry = {
-                "id": int(id),
-                "symbol": symbol,
-                "name": name,
-                "picture_url": picture_url,
-                "funding_rate_del": funding_rate,
-                "description": description, 
-                "data": [],
-            }
-            self._r.hset("all_crypto_analysis", symbol, json.dumps(new_entry))
-
-            # Add the symbol to the list_crypto
-            crypto_list = self._r.get("list_crypto")
-            if crypto_list:
-                try:
-                    crypto_list = json.loads(crypto_list)
-                except json.JSONDecodeError:
-                    crypto_list = []
-            else:
-                crypto_list = []
-
-            if symbol not in crypto_list:
-                crypto_list.append(symbol)
-                self._r.set("list_crypto", json.dumps(crypto_list))
-
-
-
-
-    def read_crypto_analysis(self, symbol: str, limit: int = 20) -> Tuple[list, str]:
-        # Fetch the data for the specified symbol from Redis
         crypto_data = self._r.hget("all_crypto_analysis", symbol)
         
-        # If no data exists for the symbol, return an empty list
         if not crypto_data:
-            return []
+            return [], None
         
-        # Load the JSON data from Redis
-        crypto_data = json.loads(crypto_data)
+        try:
+            crypto_data = json.loads(crypto_data)
+        except json.JSONDecodeError:
+            raise ValueError("Invalid JSON format in Redis for the specified symbol.")
         
-        # Ensure that the 'data' field exists and is a list
-        if isinstance(crypto_data, dict) and "data" in crypto_data:
-            analysis_list = crypto_data["data"]
-            
-            if isinstance(analysis_list, list):
-                # Return the latest 'limit' number of records
-                return analysis_list[-limit:], crypto_data["fr_expiration"]
-            else:
-                raise ValueError("'data' field is not a list")
-        else:
-            raise ValueError("Invalid data format in Redis")
-
-
-    def get_list_cryptos(self):
-        crypto_list = self._r.get("list_crypto")
+        if "data" not in crypto_data or not isinstance(crypto_data["data"], list):
+            raise ValueError("Invalid data structure in Redis for the specified symbol.")
         
-        if crypto_list:
-            try:
-                crypto_list = json.loads(crypto_list)
-            except json.JSONDecodeError:
-                crypto_list = []
-        else:
-            crypto_list = []
+        analysis_list = crypto_data["data"][-limit:]
+        fr_expiration = crypto_data.get("fr_expiration")
+        
+        return analysis_list, fr_expiration
 
-        return np.array(crypto_list)  
-
-    def get_all_cryptos(self):
+    def delete_all_analysis_for_symbol(self, symbol: str) -> None:
         """
-        Get all cryptos detailed
+        Deletes all analysis-related data for a specific cryptocurrency symbol.
+        """
+        self._r.hdel("all_crypto_analysis", symbol)
+
+    def delete_all_analysis(self) -> str:
+        """
+        Deletes all analysis-related data from all cryptocurrency entries in the 'all_crypto_analysis' hash.
+        """
+        try:
+            self._r.delete("all_crypto_analysis")
+            return "All analysis-related data has been successfully deleted from 'all_crypto_analysis'."
+        except redis.RedisError as e:
+            raise HTTPException(status_code=400, detail=f"An error occurred while deleting analysis data: {e}")
+
+    # ------------------- UTILITY FUNCTIONS -------------------
+
+    def add_crypto_offset(self) -> int:
+        """
+        Increments and returns the crypto count.
+        """
+        try:
+            count = self._r.incr("crypto_count")
+            return count
+        except redis.RedisError as e:
+            print(f"Redis error while incrementing crypto_count: {e}")
+            return 0
+
+    def delete_everything(self) -> None:
+        """
+        Flushes all data from Redis. Use with caution.
+        """
+        self._r.flushall()
+
+    # ------------------- QUERY FUNCTIONS -------------------
+
+    def get_all_cryptos(self) -> List[Dict]:
+        """
+            Get all cryptos incuding all its metadata
         """
         all_symbols = self.get_list_cryptos()
-
         result = []
         for symbol in all_symbols:
-            crypto_data = self.get_crypto_essential(symbol)
-            result.append(crypto_data)
-        
+            metadata = self.get_crypto_metadata(symbol)
+            if metadata:
+                result.append(metadata)
         return result
 
     def get_list_query(self, query: Optional[str] = None, limit: Optional[int] = None, offset: Optional[int] = 0) -> List[Dict]:
         """
         Retrieves a list of cryptocurrencies based on the provided query with pagination.
-        
-        - If no query is provided, returns all cryptos sorted by 'id' in ascending order.
-        - If a query is provided, searches both 'symbol' and 'name' (case-insensitive).
-          Results are ordered first by those that start with the query, then those that contain it.
-        
-        Args:
-            query (Optional[str]): The search query string.
-            limit (Optional[int]): Number of results to return.
-            offset (Optional[int]): Number of results to skip.
-        
-        Returns:
-            List[Dict]: A list of dictionaries containing cryptocurrency data.
         """
-        
-        # Fetch all cryptocurrencies
         all_cryptos = self.get_all_cryptos()
         
         if not query:
-            # No query provided; sort all cryptos by 'id' ascending
             sorted_all = sorted(
                 all_cryptos, 
-                key=lambda x: x.get('id', float('inf')) if isinstance(x.get('id', None), int) else float('inf')
+                key=lambda x: x.get('id', float('inf')) if isinstance(x.get('id'), int) else float('inf')
             )
         else:
-            # Normalize the query for case-insensitive comparison
             query_lower = query.lower()
-            
             starts_with = []
             contains = []
             
@@ -376,27 +382,22 @@ class RedisService:
                 symbol = crypto.get('symbol', '').lower()
                 name = crypto.get('name', '').lower()
                 
-                # Check if 'symbol' or 'name' starts with the query
                 if symbol.startswith(query_lower) or name.startswith(query_lower):
                     starts_with.append(crypto)
-                # Check if 'symbol' or 'name' contains the query
                 elif query_lower in symbol or query_lower in name:
                     contains.append(crypto)
             
-            # Sort each list by 'id' ascending to maintain consistency
             starts_with_sorted = sorted(
                 starts_with, 
-                key=lambda x: x.get('id', float('inf')) if isinstance(x.get('id', None), int) else float('inf')
+                key=lambda x: x.get('id', float('inf')) if isinstance(x.get('id'), int) else float('inf')
             )
             contains_sorted = sorted(
                 contains, 
-                key=lambda x: x.get('id', float('inf')) if isinstance(x.get('id', None), int) else float('inf')
+                key=lambda x: x.get('id', float('inf')) if isinstance(x.get('id'), int) else float('inf')
             )
             
-            # Combine the lists: starts_with first, then contains
             sorted_all = starts_with_sorted + contains_sorted
         
-        # Apply offset and limit
         if offset:
             sorted_all = sorted_all[offset:]
         if limit:
@@ -404,55 +405,16 @@ class RedisService:
         
         return sorted_all
 
-    def delete_everything(self):
-        self._r.flushall()
-
-    def delete_crypto(self, symbol):
-        self._r.hdel("all_crypto_analysis", symbol)
-
-        crypto_list = self._r.get("list_crypto")
-
-        if crypto_list:
-            try:
-                crypto_list = json.loads(crypto_list)
-            except json.JSONDecodeError:
-                crypto_list = []
-
-        if symbol in crypto_list:
-            crypto_list.remove(symbol)
-
-            self._r.set("list_crypto", json.dumps(crypto_list))
-
-    def get_crypto_data(self, symbol: str) -> Tuple[str, str, str, str]:
-        """
-        Retrieves the picture URL (logo) for the given cryptocurrency symbol.
-        """
-        crypto_data = self._r.hget("all_crypto_analysis", symbol)
-        if not crypto_data:
-            return None
-        crypto_data = json.loads(crypto_data)
-        return crypto_data.get("picture_url", None), crypto_data.get("name", None), crypto_data.get("description", None), crypto_data.get('funding_rate_del', '')
-
-    def get_crypto_essential(self, symbol) -> dict:
-        """
-        Retrives the essential data from a given crypto (name and id)
-        """
-        crypto_data = self._r.hget("all_crypto_analysis", symbol)
-        if not crypto_data:
-            return None
-        crypto_data = json.loads(crypto_data)
-
-        return {"id": crypto_data.get('id', None), "symbol": str(symbol), "name": crypto_data.get('name', None), "image": crypto_data.get('picture_url', None)}
-
     def get_cryptos_by_fr_expiration_optimized(self, expirations: List[str] = ["4h", "8h"]) -> List[Dict]:
+        """
+        Retrieves cryptocurrencies filtered by funding rate expiration times.
+        """
         matching_cryptos = []
         symbols = set()
 
-        # Use Redis sets to get all symbols with the desired expirations
         for exp in expirations:
             symbols.update(self._r.smembers(f"fr_expiration:{exp}"))
 
-        # Retrieve and parse data for all matching symbols
         if symbols:
             pipeline = self._r.pipeline()
             for symbol in symbols:
@@ -461,31 +423,31 @@ class RedisService:
 
             for crypto_data_json in crypto_data_json_list:
                 if crypto_data_json:
-                    crypto_data = json.loads(crypto_data_json)
-                    matching_cryptos.append(crypto_data)
+                    try:
+                        crypto_data = json.loads(crypto_data_json)
+                        matching_cryptos.append(crypto_data)
+                    except json.JSONDecodeError:
+                        continue
 
-        return np.array(matching_cryptos)
+        return matching_cryptos
+
+    # ------------------- DELETION FUNCTIONS -------------------
+
+    def delete_crypto(self, symbol: str) -> bool:
+        """
+        Deletes all data related to a specific cryptocurrency symbol.
+        """
+        try:
+            self._r.hdel("crypto_metadata", symbol)
+            self.delete_all_analysis_for_symbol(symbol)
+            self.remove_from_list_crypto(symbol)
+            print(f"Successfully deleted all data for symbol: {symbol}")
+            return True
+        except redis.RedisError as e:
+            print(f"Redis error while deleting symbol {symbol}: {e}")
+            return False
 
 
-    def expiration_time(self, symbol):
-        crypto_data = json.loads(self._r.hget("all_crypto_analysis", symbol))
-
-        if not crypto_data:
-            return None
-
-        return crypto_data["fr_expiration"]
-
-    def add_crypto_offset(self):
-        """Add 1 to crypto offset"""
-        count = json.loads(self._r.get("crypto_count") or "0")                   
-        if not count:
-            count = 1
-        else:
-            count += 1
-        
-        self._r.set("crypto_count", count)
-
-        return count
         
 
 ## TESTING & EXAMPLE OF REDIS ## 
@@ -571,10 +533,10 @@ if __name__ == "__main__":
 
 
     # Call the add_new_crypto method
-    # redis_service.add_new_crypto(symbol, None, whole_analysis_until_now, '4h')
-    # print(redis_service.get_list_cryptos())
+    # print(redis_service.get_all_cryptos())
+    # print(redis_service.get_crypto_metadata('BTCUSDT'))
     # redis_service.delete_everything()
-    print(redis_service.get_cryptos_by_fr_expiration_optimized('8h'))
+    print(redis_service.get_funding_rate_history('BTCUSDT'))
     # print(redis_service.get_list_query("bit"))
     # print(redis_service.get_crypto_logo("BTCUSDT"))
 
@@ -582,7 +544,7 @@ if __name__ == "__main__":
     new_period =     {
             "id": str(uuid.uuid4()),
             "period": datetime.now(timezone.utc).isoformat(),
-            "funding_rate_value": 0.22,  
+            "funding_rate_value": 0.22,   
             "analysis": {}
         }
     

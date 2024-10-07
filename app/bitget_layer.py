@@ -122,7 +122,7 @@ class BitgetService:
                         raise ValueError(f"Unexpected time difference: {difference}")
 
 
-    async def get_all_cryptos(self):
+    async def get_all_cryptos(self) -> np.ndarray:
         url = "https://api.bitget.com/api/v2/mix/market/tickers"
         params = {
             "productType": "USDT-FUTURES"
@@ -259,14 +259,14 @@ class BitgetService:
 
 
 async def main_testing():
-    start_time = int(datetime(2024, 4, 1, 10).timestamp() * 1000)  # Earlier time
-    end_time = int(datetime(2024, 4, 11).timestamp() * 1000)  # Later time
+    start_time = int(datetime(2024, 10, 6, 10).timestamp() * 1000)  # Earlier time
+    end_time = int(datetime.now().timestamp() * 1000)  # Later time
 
     bitget_layer = BitgetService()
 
     print(await bitget_layer.get_current_funding_rate('OMUSDT'))
 
-    """
+    
     granularity = '1H'  
 
     res = await bitget_layer.get_candlestick_chart('BTCUSDT', granularity, start_time, end_time)
@@ -278,6 +278,6 @@ async def main_testing():
     df.to_csv('delete_this.csv', index=False)
 
     print(df)
-    """
+    
 if __name__ == "__main__":
     asyncio.run(main_testing())

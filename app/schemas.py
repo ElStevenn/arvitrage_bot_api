@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional, List, Literal
-
+from datetime import datetime
 
 
 
@@ -11,6 +11,7 @@ class Crypto(BaseModel):
     name: Optional[str]
     image: Optional[str]
     funding_rate_delay: Literal['8h', '4h']
+    next_execution_time: datetime
 
 class CryptoSearch(BaseModel):
     id: int
