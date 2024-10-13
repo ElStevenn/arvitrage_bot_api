@@ -2,6 +2,7 @@ import asyncio
 import numpy as np
 import pandas as pd
 import aiohttp
+import pytz
 from fastapi.encoders import jsonable_encoder
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
@@ -255,18 +256,29 @@ class BitgetService:
 
             return final_result
             
+    async def get_price_of_period(self, symbol: str, period: int):
+        """Get what was the price from a given symbol (in Opening time)"""
+        
+        end_time = period + (1 * 60 * 1000)
+        period_ = await self.get_candlestick_chart(symbol, '1m', period, end_time)
+
+        if period_.size > 0:
+            return period_[0][4]
+        else:
+            timestamp = datetime.fromtimestamp(int(period) / 1000, pytz.timezone('Europe/Amsterdam'))
+            raise ValueError(f"Period {timestamp} doesn't exist")
 
 
 
 async def main_testing():
-    start_time = int(datetime(2024, 10, 6, 10).timestamp() * 1000)  # Earlier time
+    start_time = int(datetime.now().timestamp() * 1000) - (5 * 60 * 1000)  # Earlier time
     end_time = int(datetime.now().timestamp() * 1000)  # Later time
 
     bitget_layer = BitgetService()
 
-    print(await bitget_layer.get_current_funding_rate('OMUSDT'))
+    print(await bitget_layer.get_price_of_period('BTCUSDT', start_time))
 
-    
+    """
     granularity = '1H'  
 
     res = await bitget_layer.get_candlestick_chart('BTCUSDT', granularity, start_time, end_time)
@@ -278,6 +290,6 @@ async def main_testing():
     df.to_csv('delete_this.csv', index=False)
 
     print(df)
-    
+    """
 if __name__ == "__main__":
     asyncio.run(main_testing())

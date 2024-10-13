@@ -1,0 +1,22 @@
+version: '3'
+services:
+  redis_tasks:
+    image: redis
+    volumes:
+      - paus-volume:/data
+    networks:
+      - my_network
+
+  python_app:
+    image: python:3.12
+    volumes:
+      - /path/to/app:/app
+    networks:
+      - my_network
+    command: python3 -m app.historcal_funding_rate
+
+networks:
+  my_network:
+
+volumes:
+  paus-volume:

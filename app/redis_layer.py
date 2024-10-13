@@ -37,6 +37,9 @@ class RedisService:
             # Local machine
             redis_host = 'localhost'
             port = 6378 
+        elif hostname == 'scw-bold-noyce': 
+            redis_host = 'localhost'
+            port = 6379    
         else: 
             # Server deployment
             redis_host = 'redis_tasks'  
@@ -276,12 +279,10 @@ class RedisService:
         
         funding_rate = last_entry.get("funding_rate_value")
         period_str = last_entry.get("period")
-        entry_id = last_entry.get("id")
         
         funding_rate_value = float(funding_rate) if isinstance(funding_rate, (float, int)) else None
         period_timestamp = None
-        entry_id_str = entry_id if isinstance(entry_id, str) else None
-        
+            
         if isinstance(period_str, str):
             try:
                 period_dt = datetime.fromisoformat(period_str)
@@ -289,7 +290,7 @@ class RedisService:
             except ValueError:
                 period_timestamp = None
         
-        return funding_rate_value, period_timestamp, entry_id_str
+        return funding_rate_value, period_timestamp
 
     def read_crypto_analysis(self, symbol: str, limit: int = 20) -> Tuple[List[Dict], Optional[str]]:
         """
