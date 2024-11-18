@@ -6,11 +6,12 @@ import pytz
 import numpy as np
 import logging
 
-from app.redis_layer import RedisService
-from app.bitget_layer import BitgetService
-from app.chart_analysis import FundingRateChart
 from typing import Tuple, Literal
-from config import COINMARKETCAP_APIKEY
+from src.config import COINMARKETCAP_APIKEY
+
+from src.app.redis_layer import RedisService
+from src.app.bitget_layer import BitgetService
+from src.app.chart_analysis import FundingRateChart
 
 
 # Configure logging

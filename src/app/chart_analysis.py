@@ -1,9 +1,10 @@
-from app.bitget_layer import BitgetService, Granularity
 from datetime import datetime, timezone
 from typing import Literal
 import pandas as pd
 import numpy as np
 import asyncio
+
+from src.app.bitget_layer import BitgetService, Granularity
 
 class FundingRateChart:
     

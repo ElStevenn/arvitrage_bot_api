@@ -10,12 +10,12 @@ from typing import Optional, List
 from datetime import datetime, timezone, timedelta
 import asyncio, logging, pytz
 
-from app.bitget_layer import BitgetService
-from app.redis_layer import RedisService
-from app.schedule_layer import ScheduleLayer
-from app.chart_analysis import FundingRateChart
-from app.historcal_funding_rate import MainServiceLayer
-from app.schemas import *
+from src.app.bitget_layer import BitgetService
+from src.app.redis_layer import RedisService
+from src.app.schedule_layer import ScheduleLayer
+from src.app.chart_analysis import FundingRateChart
+from src.app.historcal_funding_rate import MainServiceLayer
+from src.app.schemas import *
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -78,7 +78,7 @@ app.add_middleware(
 )
 
 
-@app.get("/get_historical_funding_rate/{symbol}", 
+@app.get("/historical_funding_rate/{symbol}", 
     description="### Get Historical Funding Rates\n\n From a given symbol returns a list with the historical funding rate and if there was a controversial period, provides an analysis about what happened with the price", 
     tags=["Base Funding Rate"])
 async def get_historical_funding_rate(
@@ -105,7 +105,7 @@ async def get_historical_funding_rate(
     else:
         return []
 
-@app.get("/get_today_analysis/{symbol}", description="### Get today analysis from a given crypto\n\n", tags=["Crypto Analysis"])
+@app.get("/today_analysis/{symbol}", description="### Get today analysis from a given crypto\n\n", tags=["Crypto Analysis"])
 async def get_today_analysis(symbol: str):
     chart_analysis = FundingRateChart(symbol)
     period = int(datetime.now(timezone.utc).timestamp() * 1000)
@@ -116,7 +116,7 @@ async def get_today_analysis(symbol: str):
     return analysis
 
 
-@app.get("/get_detail_event/{symbol}", description="Get name and logo of the crypto", tags=["Crypto Search"],  response_model=Crypto)
+@app.get("/detail_event/{symbol}", description="Get name and logo of the crypto", tags=["Crypto Search"],  response_model=Crypto)
 async def get_detail_event(symbol: str):
     try:
         crypto_metadata = redis_memory.get_crypto_metadata(symbol)
@@ -132,7 +132,8 @@ async def get_detail_event(symbol: str):
             "image": crypto_metadata["picture_url"], 
             "description": crypto_metadata["description"], 
             "funding_rate_delay": '4h' if crypto_metadata["funding_rate_del"] == 4 else '8h', 
-            "next_execution_time": next_execution_time.isoformat()}
+            "next_execution_time": next_execution_time.isoformat()
+            }
     
     except TypeError:
         raise HTTPException(status_code=404, detail=f"Symbol {symbol} not found")
@@ -164,8 +165,6 @@ async def search_crypto(
     return response
  
 
-
-
 @app.websocket("/search-crypto-ws")
 async def websocket_search_crypto(websocket: WebSocket):
     await websocket.accept()
@@ -192,7 +191,7 @@ async def websocket_search_crypto(websocket: WebSocket):
         print(f"Error: {e}")
 
 
-@app.delete("/delete_all_analysis", description="### Administrative function\n\n - This function is used to clear all the **current analysis**\n\n - Doesn't include the crytpos", tags=["Administrative"])
+@app.delete("/delete_all_cryptos_analysis", description="### Administrative function\n\n - This function is used to clear all the **current analysis**\n\n - Doesn't include the crytpos", tags=["Administrative"])
 async def delete_all_cryptos_analysis():
     response = redis_memory.delete_all_analysis()
         

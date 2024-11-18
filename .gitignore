@@ -1,2 +1,6 @@
-venv
 .history
+src/.env
+
+*__pycache__
+*security
+*venv

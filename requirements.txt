@@ -10,5 +10,6 @@ numpy
 pandas
 aiohttp
 redis
+python-dotenv
 matplotlib
 websockets
