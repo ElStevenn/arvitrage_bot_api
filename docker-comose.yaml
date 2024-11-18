@@ -1,22 +1,23 @@
 version: '3'
 services:
   redis_tasks:
-    image: redis
+    image: mongo
     volumes:
-      - paus-volume:/data
+    - paus-volume:/data
     networks:
-      - my_network
+    - my_network
 
   python_app:
     image: python:3.12
     volumes:
-      - /path/to/app:/app
+    - /path/to/app:/app
     networks:
-      - my_network
+    - my_network
     command: python3 -m app.historcal_funding_rate
 
 networks:
   my_network:
+
 
 volumes:
   paus-volume:
