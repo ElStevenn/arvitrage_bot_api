@@ -2,10 +2,10 @@ provider "aws" {
     region = "eu-south-2"
 }
 
-resource "aws_security_group" "545009827213-funding-rate" {
-  name        = "545009827213-funding-rate"
+resource "aws_security_group" "funding-rate-545009827213" {
+  name        = "funding-rate-545009827213"
   description = "Security group mainly used in MongoDB - HTTP applications"
-  vpc_id      = var.main.id
+  vpc_id      = var.vpc_id
 
   tags = {
     Name = "allow_mongo"
@@ -28,7 +28,7 @@ resource "aws_security_group" "545009827213-funding-rate" {
   }
 
   ingress {
-    from_port   = 8000
+    from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
     cidr_blocks = [ "0.0.0.0/0" ]
@@ -51,11 +51,11 @@ resource "aws_security_group" "545009827213-funding-rate" {
 }
 
 resource "aws_instance" "historical_funding_rate" {
-  ami                    = "ami-08a361410fcb2f861"
+  ami                    = "ami-0bb457e0c5095fa9d"
   instance_type          = "t3.medium"
   key_name               = "instance_key"
-  subnet_id              = var.main.subnet_id
-  vpc_security_group_ids = [aws_security_group.545009827213-funding-rate]
+  subnet_id              = var.subnet_id
+  vpc_security_group_ids = [aws_security_group.funding-rate-545009827213.id]
 
   root_block_device {
     volume_size = 30
@@ -68,7 +68,16 @@ resource "aws_instance" "historical_funding_rate" {
     Name = "CryptoProject"
   }
 
+  connection {
+    type = "ssh"
+    user = "ubuntu"
+    private_key = file("/home/mrpau/Desktop/Secret_Project/other_layers/historical_funding_rate_api/src/security/instance_key.pem")
+    host = self.public_ip
+  }
+
   provisioner "remote-exec" {
+
+
     inline = [ 
       "sudo apt update -y",
       "sudo timedatectl set-timezone Europe/Madrid",
@@ -96,8 +105,9 @@ resource "aws_instance" "historical_funding_rate" {
       "chmod +x setup_server.sh",
       "./setup_server.sh",
       
-      # Call CI Pipeline
-      "docker build -t funding_rate ."
+      # Call CI Pipeline (at this moment just build container)
+      "docker build -t funding_rate .",
+      "docker run -d --name funding_rate_v1 -p 8080:8080"
 
 
 

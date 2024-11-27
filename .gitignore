@@ -4,3 +4,9 @@ src/.env
 *__pycache__
 *security
 *venv
+
+*sensitive.tfvars
+*.terraform.lock.hcl
+*.terraform
+*terraform.tfstate
+*terraform.tfstate.backup

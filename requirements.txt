@@ -13,3 +13,6 @@ redis
 python-dotenv
 matplotlib
 websockets
+cryptography
+paramiko
+pymongo
