@@ -1,10 +1,12 @@
 #!/bin/bash
 
-# Configuration
+# Declare variables
 mongodb_container="mongodb_v1"
 network="my_network"
 volume="data_volume"
 key_path="src/security/secure_key"
+mongo_username=""
+mongo_password=""
 
 
 install_docker() {
@@ -66,12 +68,19 @@ if docker ps -a --format '{{.Names}}' | grep -q "^$mongodb_container$"; then
 else
     echo "Creating MongoDB container '$mongodb_container'."
     docker pull mongo
+
+    echo "Enter mongodb username"
+    read mongo_username
+
+    echo "Enter mongodb password"
+    read -s mongo_password
+
     docker run -d \
         --name $mongodb_container \
         --network $network \
         --volume $volume:/data/db \
-        -e MONGO_INITDB_ROOT_USERNAME=root \
-        -e MONGO_INITDB_ROOT_PASSWORD=example \
+        -e MONGO_INITDB_ROOT_USERNAME=$mongo_username \
+        -e MONGO_INITDB_ROOT_PASSWORD=$mongo_password \
         mongo
 fi
 
@@ -81,6 +90,15 @@ if ! docker network inspect $network | grep -q "$mongodb_container"; then
     docker network connect $network $mongodb_container
 else
     echo "MongoDB container '$mongodb_container' is already connected to network '$network'."
+fi
+
+# Get mongodb IP address
+mongodb_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $mongodb_container)
+if [ -z "$mongodb_ip" ]; then
+    echo "Failed to retrieve MongoDB container's IP address."
+    exit 1
+else
+    echo "MongoDB container's IP address: $mongodb_ip"
 fi
 
 # Create key-pair
@@ -100,6 +118,29 @@ else
         exit 1
     fi
 fi
+
+# Ask venv required sensitive variables
+echo "Enter coinmarketcap apikey"
+read coinmarketcap_apikey
+
+# Create src/.env file
+if [ -f "src/.env" ]; then
+    echo "src/.env file already exists."
+else
+    echo "Creating src/.env file..."
+    cat <<EOF > src/.env
+# APIKEYS of puntual APIs
+COINMARKETCAP_APIKEY=$coinmarketcap_apikey
+
+
+# MONGODB CONNECTION
+MONGODB_URL=$mongodb_ip
+MONGO_USER=$mongo_username
+MONGO_PASSWD=$mongo_password
+EOF
+    echo "src/.env file created successfully."
+fi
+
 
 
 # # Jenkins setup

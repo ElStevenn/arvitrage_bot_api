@@ -1,11 +1,17 @@
 import os
 from dotenv import load_dotenv
-"""How can i install this"""
 import paramiko
 
 load_dotenv()
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+# MONGODB
+MONGODB_URL = os.getenv('MONGODB_URL', 'mongodb://localhost:27017')
+MONGO_USER = os.getenv('MONGO_USER', 'mongo_user')
+MONGO_PASSWD = os.getenv('MONGO_PASSWD', 'mongo_password')
+
 
 # API-KEYS
 COINMARKETCAP_APIKEY = os.getenv('COINMARKETCAP_APIKEY', 'coinmarketcap-apikey')

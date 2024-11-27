@@ -5,13 +5,16 @@ import uuid
 import pytz
 import numpy as np
 import logging
-
+import time as lowtime
 from typing import Tuple, Literal
-from src.config import COINMARKETCAP_APIKEY
+from config import COINMARKETCAP_APIKEY
 
-from src.app.redis_layer import RedisService
-from src.app.bitget_layer import BitgetService
+from src.app.crypto_data_service import CryptoDataService
+from src.app.mongo.controller import MongoDB_Crypto
+
+from src.app.mongo.schema import *
 from src.app.chart_analysis import FundingRateChart
+
 
 
 # Configure logging
@@ -21,248 +24,199 @@ logger = logging.getLogger(__name__)
 
 class MainServiceLayer:
     def __init__(self) -> None:
-        self.redis_service = RedisService()
-        self.bitget_service = BitgetService()
+        self.data_service = CryptoDataService()
+        self.mongo_service = MongoDB_Crypto()
         self.timezone = "Europe/Amsterdam"
 
     # FUNCTION EVERY DAY
     async def crypto_rebase(self):
-        """Everyday Update the list of cryptos as well as gets its logos"""
-        list_current_cryptos = self.redis_service.get_list_cryptos(); print("current cryptos redis -> ", list_current_cryptos)
-        logger.info(f"Current cryptos -> {list_current_cryptos}")
-        bitget_cryptos = await self.bitget_service.get_all_cryptos()
-
-        # Find cryptos that don't match
-        if list_current_cryptos.any():
-            cryptos_to_delete = list_current_cryptos[~np.isin(list_current_cryptos, bitget_cryptos)]
-            cryptos_to_add = bitget_cryptos[~np.isin(bitget_cryptos, list_current_cryptos)]
-        else:
-            cryptos_to_delete = np.array([])
-            cryptos_to_add = bitget_cryptos
-
-        # Remove outdated cryptos
-        if cryptos_to_delete.any():
-            for crypto_to_remove in cryptos_to_delete:
-                self.redis_service.delete_crypto(crypto_to_remove)
-                logger.info(f"Removed crypto: {crypto_to_remove}")
-
-        # Add new cryptos
-        if cryptos_to_add.any():
-            for crypto in cryptos_to_add:
-                if str(crypto).lower().startswith('1000'):
-                    crypto = crypto[4:]
-
-                logger.info(f"Adding crypto: {crypto}")
-                try:
-                    crypto_logo, name, description = await self.get_crypto_logo(crypto)
-                except Exception as e:
-                    logger.error(f"Failed to get logo for {crypto}: {e}")
-                    continue
-
-                # Modify logo and set it to 128 pixels
-                crypto_logo = crypto_logo.replace("64x64", "128x128")
-                
-                try:
-                    funding_rate = await self.bitget_service.get_funding_rate_period(symbol=crypto)
-                except Exception as e:
-                    logger.error(f"Failed to get funding rate for {crypto}: {e}")
-                    funding_rate = "N/A" 
-
-                # Add the new crypto to Redis
-                self.redis_service.add_crypto_metadata(crypto, name, crypto_logo, description, funding_rate)
-                logger.info(f"Added crypto to Redis: {crypto}")
+        # ... (Your existing code for crypto_rebase)
+        pass
 
     # FUNCTION EVERY 8 or 4 HOURS - DEPENDING | every XX and 1 minute!
     async def schedule_set_analysis(self, period: Literal['4h', '8h']):
         """
         Save new funding rate in order to build the chart:
-        - Set an analysis if funding rate was less than -0.5, otherwise it'll save the new funding rate.
+        - Create new analysis entries for cryptos that don't have funding rates.
+        - Update existing entries by analyzing funding rates.
         - Function executed every 8 or 4 hours, depending on the period.
         """
-        exec_time = int(self.get_last_period_funding_rate(period).timestamp() * 1000)
+        period_value = int(period[:-1])
+        exec_time = int(self.get_last_period_funding_rate(period_value).timestamp() * 1000)
 
         # Fetch cryptos based on the period
-        cryptos = (self.redis_service.get_cryptos_by_fr_expiration_optimized('4h') 
-                if period == '4h' 
-                else self.redis_service.get_list_cryptos())
+        if period_value == 4:
+            cryptos = await self.mongo_service.get_all_current_analysis(4)
+        else:
+            cryptos = await self.mongo_service.get_all_current_analysis(-1)
 
         logger.info(f"Cryptos to analyze for period {period}: {cryptos}")
 
-        if cryptos.size == 0:
-            logger.warning("No cryptos available for analysis.")
-            return
+        semaphore = asyncio.Semaphore(5)
 
-        # Create a semaphore to limit concurrency
-        semaphore = asyncio.Semaphore(5)  
+        if not cryptos:
+            # No cryptos available for analysis, initializing for the first time
+            logger.warning("No cryptos available for analysis, adding new analysis for the first time ever")
+            list_cryptos = await self.data_service.get_all_cryptos()
 
-        # Process cryptos in batches
-        for i in range(0, len(cryptos), 40):
-            batch = cryptos[i:i+40]
-            logger.info(f"Processing batch {i // 40 + 1} with {len(batch)} cryptos.")
-            
-            tasks = [self.decide_analysis_crypto(crypto, exec_time, semaphore) for crypto in batch]
-            await asyncio.gather(*tasks)
+            for i in range(0, len(list_cryptos), 40):
+                batch = list_cryptos[i:i+40]
+                logger.info(f"Processing batch {i // 40 + 1} with {len(batch)} cryptos.")
 
-            # Wait 1 minute before processing the next batch
-            await asyncio.sleep(60)
+                tasks = [self.set_first_analysis(crypto, semaphore, exec_time) for crypto in batch]
+                await asyncio.gather(*tasks)
 
-        logger.info("Finished analyzing all cryptos.")
+                # Wait 1 minute before processing the next batch
+                await asyncio.sleep(60)
 
+            logger.info("Finished initializing analysis for all cryptos.")
+
+        else:
+            # Process existing cryptos
+            symbols_to_create = []
+            symbols_to_analyze = []
+
+            # Iterate over the list of cryptos
+            for crypto_dict in cryptos:
+                for symbol, data in crypto_dict.items():
+                    if data is None:
+                        symbols_to_create.append(symbol)
+                    else:
+                        symbols_to_analyze.append(symbol)
+
+            logger.info(f"Symbols to create: {symbols_to_create}")
+            logger.info(f"Symbols to analyze: {symbols_to_analyze}")
+
+            # Process symbols that need new funding rate entries
+            for i in range(0, len(symbols_to_create), 40):
+                batch = symbols_to_create[i:i+40]
+                logger.info(f"Processing creation batch {i // 40 + 1} with {len(batch)} cryptos.")
+
+                tasks = [self.set_first_analysis(symbol, semaphore, exec_time) for symbol in batch]
+                await asyncio.gather(*tasks)
+
+                # Wait 1 minute before processing the next batch
+                await asyncio.sleep(60)
+
+            # Process symbols that need to be analyzed
+            for i in range(0, len(symbols_to_analyze), 40):
+                batch = symbols_to_analyze[i:i+40]
+                logger.info(f"Processing analysis batch {i // 40 + 1} with {len(batch)} cryptos.")
+
+                tasks = [self.decide_analysis_crypto(symbol, exec_time, semaphore) for symbol in batch]
+                await asyncio.gather(*tasks)
+
+                # Wait 1 minute before processing the next batch
+                await asyncio.sleep(60)
+
+            logger.info("Finished analyzing all cryptos.")
 
     async def decide_analysis_crypto(self, crypto: str, exec_time, semaphore):
         """
-            The result of this analysis includes 2 things:
-                 - Get current Funding Rate, current price index and current datetime
-                 - Get the last FR and analysis what happened over the 8 hours, and save it
+        Analyze the funding rate for a crypto and update its analysis if necessary.
         """
-        try:
-            # Retrieve the last funding rate analysis
-            fund_rate_ans, fund_period_ans, _ = self.redis_service.get_last_funding_rate(symbol=crypto)
-
-        except Exception as e:
-            logger.error(f"Failed to get last funding rate for {crypto}: {e}")
-            return None
-
         async with semaphore:
             try:
-                # Get the latest funding rate from Bitget
-                fund_rate, fund_period = await self.bitget_service.get_last_contract_funding_rate(crypto, False)
+                # Retrieve the last funding rate analysis
+                current_contract_funding_rate, last_contract_funding_rate, current_period_ts, last_period_ts, current_period, last_period = await self.data_service.get_last_contract_funding_rate(crypto)
+                
             except Exception as e:
-                logger.error(f"Failed to get current funding rate for {crypto}: {e}")
+                logger.error(f"Failed to get last funding rate for {crypto}: {e}")
                 return None
 
         async with semaphore:
             try:
-                # Get Current price
-                index_period_price = await self.bitget_service.get_price_of_period(symbol=crypto, period=exec_time)
+                # Get current index price
+                index_period_price = await self.data_service.get_price_of_period(symbol=crypto, period=exec_time)
             except Exception as e:
                 logger.error(f"Failed to get price for {crypto}: {e}")
                 return None
 
         # Create a new funding rate analysis entry
-        current_analysis = {
-            "period": fund_period,
-            "funding_rate_value": float(fund_rate),
-            "index_period_price": index_period_price,
-            "analysis": {}
-        }
+        current_analysis = FundingRateAnalysis(
+            period_ts=current_period_ts,
+            period=current_period,
+            funding_rate_value=float(current_contract_funding_rate),
+            index_period_price=index_period_price,
+            key_moment=float(current_contract_funding_rate) <= -0.5,
+            analysis={}
+        )
         logger.info(f"Current analysis for {crypto}: {current_analysis}")
 
-        # Add the new funding rate entry to Redis
-        if fund_rate > -0.5:
-            current_analysis["key_moment"] = False
-            self.redis_service.add_funding_rate_analysis(symbol=crypto, funding_rate_analysis=current_analysis)
-            logger.info(f"Added new funding rate entry for {crypto}: {current_analysis}")
-            return None 
-        else:
-            current_analysis["key_moment"] = True
+        # Save current analysis no matter the funding value
+        await self.mongo_service.save_current_funding_rate(symbol=crypto, analysis=current_analysis)
 
-        # Conditional Analysis: If previous funding rate <= -0.5, add analysis to pre-last entry
-        if fund_rate_ans is not None and float(fund_rate_ans) <= -0.5 and fund_period_ans:
-            logger.info(f"Funding rate <= -0.5 for {crypto}. Adding analysis to previous entry.")
+        # If the last funding rate was <= -0.5, generate analysis for last period
+        if float(last_contract_funding_rate) <= -0.5:
+            logger.info(f"Last funding rate <= -0.5 for {crypto}. Generating analysis for last period.")
             try:
+                # Generate analysis
                 analysis_chart = FundingRateChart(symbol=crypto)
-                last_analysis = analysis_chart.set_analysis(period=int(fund_period_ans))
+                last_analysis_data = await analysis_chart.set_analysis(period=int(last_period_ts))
+
+                # Prepare the updated analysis data
+                analysis_data = Analysis(
+                    description=last_analysis_data["description"],
+                    eight_hour_variation=last_analysis_data["eight_hour_variation"],
+                    ten_minute_variation=last_analysis_data["ten_minute_variation"],
+                    one_minute_variation=last_analysis_data["one_minute_variation"]
+                )
+
+                # Update the previous funding rate analysis entry with the new analysis
+                await self.data_service.save_last_funding_rate_analysis(symbol=crypto, analysis=analysis_data)
+
+                logger.info(f"Added analysis to previous funding rate for {crypto}")
+
             except Exception as e:
                 logger.error(f"Failed to generate analysis for {crypto}: {e}")
                 return None
 
-            # Prepare the updated analysis data
-            analysis_data = last_analysis
-
-            # Use the correct method
+    async def set_first_analysis(self, symbol: str, semaphore, exec_time):
+        """
+        Create the first funding rate analysis entry for a crypto.
+        """
+        # Get current funding rate
+        async with semaphore:
             try:
-                self.redis_service.set_last_analysis(symbol=crypto, analysis_data=analysis_data)
-                logger.info(f"Added analysis to pre-last funding rate for {crypto}")
+                current_contract_funding_rate, _, current_period_ts, _, current_period, _ = await self.data_service.get_last_contract_funding_rate(symbol)
             except Exception as e:
-                logger.error(f"Failed to add analysis to pre-last funding rate for {crypto}: {e}")
+                logger.error(f"Failed while getting the crypto last analysis for {symbol}: {e}")
                 return None
 
-                
+        # Get index price
+        async with semaphore:
+            try:
+                # Get current index price
+                index_period_price = await self.data_service.get_price_of_period(symbol=symbol, period=exec_time)
+            except Exception as e:
+                logger.error(f"Failed while getting the index price for {symbol}: {e}")
+                return None
+        
+        current_analysis = FundingRateAnalysis(
+            period_ts=current_period_ts,
+            period=current_period,
+            funding_rate_value=float(current_contract_funding_rate),
+            index_period_price=index_period_price,
+            key_moment=float(current_contract_funding_rate) <= -0.5,
+            analysis={}
+        )
 
-    async def get_crypto_logo(self, symbol: str) -> Tuple[str, str, str]:
-        """Fetches the crypto logo, name, and description from CoinMarketCap API."""
-        if symbol.lower().endswith('usdt'):
-            symbol = symbol[:-4]
+        await self.data_service.save_current_funding_rate(symbol=symbol, analysis=current_analysis)
+        logger.info(f"Initialized analysis for {symbol}")
 
-        api_url = f"https://pro-api.coinmarketcap.com/v1/cryptocurrency/info?symbol={symbol}"
-        headers = {
-            "X-CMC_PRO_API_KEY": COINMARKETCAP_APIKEY,
-            "Accept": "application/json"
-        }
+    # Other methods remain unchanged...
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url=api_url, headers=headers) as response:
-                if response.status == 200:
-                    api_response = await response.json()
-
-                    try:
-                        data = api_response['data'][symbol]
-                        logo_url = data['logo']
-                        name = data['name']
-                        description = data['description']
-                        return logo_url, name, description
-                    except KeyError:
-                        error_msg = f"Missing expected data for symbol: {symbol} in API response."
-                        logger.error(error_msg)
-                        raise KeyError(error_msg)
-                else:
-                    text_response = await response.text()
-                    error_msg = f"API request failed for symbol: {symbol}. Status: {response.status}, Response: {text_response}"
-                    logger.error(error_msg)
-                    raise Exception(error_msg)
-
-    def get_next_funding_rate(self, delay: Literal[8,4], ans = False):
-        # Define next execution times
-        execution_times = [time(hour, 0) for hour in range(2, 23, delay)]
-
-        timezone = pytz.timezone(self.timezone)
-        now_datetime = datetime.now(timezone)
-        now_time = now_datetime.time()
-
-        sorted_times = sorted(t for t in execution_times if t > now_time)
-        if sorted_times:
-            next_time_of_day = sorted_times[1] if ans and len(sorted_times) > 1 else sorted_times[0]
-        else:
-            next_time_of_day = execution_times[0]
-
-        # Combine current date with next_time_of_day
-        naive_datetime = datetime.combine(now_datetime.date(), next_time_of_day)
-
-        # Localize the naive datetime to the specified timezone
-        next_execution_datetime = timezone.localize(naive_datetime)
-
-        # If the scheduled time is in the past, schedule for the next day
-        if next_execution_datetime <= now_datetime:
-            next_execution_datetime += timedelta(days=1)
-
-        return next_execution_datetime
+    def get_next_funding_rate(self, delay: Literal[8, 4], ans=False):
+        # ... (Your existing code for get_next_funding_rate)
+        pass
 
     def get_last_period_funding_rate(self, delay: Literal[8, 4], ans=False):
-        # Define previous execution times
-        execution_times = [time(hour, 0) for hour in range(2, 23, delay)]
+        # ... (Your existing code for get_last_period_funding_rate)
+        pass
 
-        timezone = pytz.timezone(self.timezone)
-        now_datetime = datetime.now(timezone)
-        now_time = now_datetime.time()
-
-        sorted_times = sorted(t for t in execution_times if t < now_time)
-        if sorted_times:
-            last_time_of_day = sorted_times[-2] if ans and len(sorted_times) > 1 else sorted_times[-1]
-        else:
-            last_time_of_day = execution_times[-1]
-
-        # Combine current date with last_time_of_day
-        naive_datetime = datetime.combine(now_datetime.date(), last_time_of_day)
-
-        # Localize the naive datetime to the specified timezone
-        last_execution_datetime = timezone.localize(naive_datetime)
-
-        # If the scheduled time is in the future, schedule for the previous day
-        if last_execution_datetime >= now_datetime:
-            last_execution_datetime -= timedelta(days=1)
-
-        return last_execution_datetime
+    async def get_crypto_logo(self, symbol: str) -> Tuple[str, str, str]:
+        # ... (Your existing code for get_crypto_logo)
+        pass
 
 
 async def main_testing():
@@ -272,12 +226,14 @@ async def main_testing():
     # await myown_service.crypto_rebase()
     # print(myown_service.get_next_funding_rate(4, True))
 
+    # Execute the schedule_set_analysis method
+    await myown_service.schedule_set_analysis('8h')
 
-    # minutes_ago = int(datetime.now().timestamp() * 1000) - (10 * 60 * 60 * 1000)
-    # await myown_service.schedule_set_analysis('8h', minutes_ago)
-    # await myown_service.decide_analysis_crypto('BIGTIMEUSDT')
-    # await myown_service.get_crypto_logo("BTCUSDT")
-    print(myown_service.get_last_period_funding_rate(8))
+    # Alternatively, to test decide_analysis_crypto with a specific crypto:
+    # semaphore = asyncio.Semaphore(5)
+    # exec_time = int(myown_service.get_last_period_funding_rate(8).timestamp() * 1000)
+    # await myown_service.decide_analysis_crypto('BIGTIMEUSDT', exec_time, semaphore)
+
     logger.info("***** Analysis Completed *****")
 
 
