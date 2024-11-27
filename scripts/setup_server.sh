@@ -78,6 +78,7 @@ else
         --name $mongodb_container \
         --network $network \
         --volume $volume:/data/db \
+        -p 27017:27017 \
         -e MONGO_INITDB_ROOT_USERNAME=$mongo_username \
         -e MONGO_INITDB_ROOT_PASSWORD=$mongo_password \
         mongo
@@ -89,15 +90,6 @@ if ! docker network inspect $network | grep -q "$mongodb_container"; then
     docker network connect $network $mongodb_container
 else
     echo "MongoDB container '$mongodb_container' is already connected to network '$network'."
-fi
-
-# Get mongodb IP address
-mongodb_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $mongodb_container)
-if [ -z "$mongodb_ip" ]; then
-    echo "Failed to retrieve MongoDB container's IP address."
-    exit 1
-else
-    echo "MongoDB container's IP address: $mongodb_ip"
 fi
 
 # Ensure the directory for the key exists
@@ -131,11 +123,11 @@ if [ -f "src/.env" ]; then
 else
     echo "Creating src/.env file..."
     cat <<EOF > src/.env
-# APIKEYS of puntual APIs
+# APIKEYS of punctual APIs
 COINMARKETCAP_APIKEY=$coinmarketcap_apikey
 
 # MONGODB CONNECTION
-MONGODB_URL=$mongodb_ip
+MONGODB_URL=localhost
 MONGO_USER=$mongo_username
 MONGO_PASSWD=$mongo_password
 EOF
