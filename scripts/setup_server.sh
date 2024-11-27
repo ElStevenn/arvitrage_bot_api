@@ -8,7 +8,6 @@ key_path="src/security/secure_key"
 mongo_username=""
 mongo_password=""
 
-
 install_docker() {
     # Function to install docker
 
@@ -101,6 +100,9 @@ else
     echo "MongoDB container's IP address: $mongodb_ip"
 fi
 
+# Ensure the directory for the key exists
+mkdir -p "$(dirname "$key_path")"
+
 # Create key-pair
 if [ -f "$key_path" ] && [ -f "$key_path.pub" ]; then
     echo "Key pair already exists at $key_path and $key_path.pub"
@@ -132,7 +134,6 @@ else
 # APIKEYS of puntual APIs
 COINMARKETCAP_APIKEY=$coinmarketcap_apikey
 
-
 # MONGODB CONNECTION
 MONGODB_URL=$mongodb_ip
 MONGO_USER=$mongo_username
@@ -140,6 +141,7 @@ MONGO_PASSWD=$mongo_password
 EOF
     echo "src/.env file created successfully."
 fi
+
 
 
 

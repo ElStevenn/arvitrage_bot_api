@@ -19,7 +19,7 @@ class ConnectionMongo():
         if hostname == 'mamadocomputer' or hostname == 'pauserver':
             self.client = AsyncMongoClient(f"mongodb://root:example@172.18.0.2:27017/?authSource=admin")
         else:
-            self.client = AsyncMongoClient( f"mongodb://{MONGO_USER}:{password_encoded}@mongo_container:27017/?authSource=admin" )
+            self.client = AsyncMongoClient(f"mongodb://{MONGO_USER}:{password_encoded}@mongo_container:27017/?authSource=admin")
 
         # Database
         self.db_metadata = self.client["crypto_metadata"]
