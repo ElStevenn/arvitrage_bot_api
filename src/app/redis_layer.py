@@ -34,14 +34,11 @@ class RedisService:
         hostname = socket.gethostname()
         print("HOSTNAME! -> ", hostname)
         if hostname == 'mamadocomputer':
-            # Local machine
+            # Developerment deployment
             redis_host = 'localhost'
             port = 6378 
-        elif hostname == 'scw-bold-noyce': 
-            redis_host = 'localhost'
-            port = 6379    
         else: 
-            # Server deployment
+            # Server / Test deployment
             redis_host = 'redis_tasks'  
             port = 6379
 

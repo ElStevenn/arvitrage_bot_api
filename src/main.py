@@ -10,7 +10,7 @@ from typing import Optional, List
 from datetime import datetime, timezone, timedelta
 import asyncio, logging, pytz
 
-from src.app.bitget_layer import BitgetService
+from src.app.crypto_data_service import CryptoDataService
 from src.app.redis_layer import RedisService
 from src.app.schedule_layer import ScheduleLayer
 from src.app.chart_analysis import FundingRateChart
@@ -57,8 +57,8 @@ async def lifespan(app: FastAPI):
         logger.info("Scheduler shut down.")
 
 app = FastAPI(
-    title="Historical Funding Rate API",
-    summary="Cruccial piece of Pau's Funding rate sercice, this API manages ",
+    title="MarketInsightsAPI ",
+    description="MarketInsightsAPI is a part of TradeVisionary application, and it's an API cryptocurrency analytics platform that provides funding rate analysis, chart insights, real-time metadata, and search capabilities, along with robust WebSocket and administrative functionalities.",
     lifespan=lifespan
 )
 
@@ -66,7 +66,7 @@ origins = [
     "http://0.0.0.0:80",
     "http://localhost:8080",
     "http://3.143.209.3/",
-    
+    "http://185.254.206.129/"
 ]
 
 app.add_middleware(

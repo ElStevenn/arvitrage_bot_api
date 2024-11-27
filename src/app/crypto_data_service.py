@@ -16,7 +16,7 @@ class Granularity:
     DAY_1 = '86400'
 
 
-class BitgetService:
+class CryptoDataService:
     def __init__(self) -> None:
         self.max_pages = 5
 
