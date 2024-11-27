@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # Configuration
-mongo_image="mongo"
 mongodb_container="mongodb_v1"
 network_name="my_network"
+volume_name="data_volume"
+key_path="src/security/secure_key"
 
 # Stop and remove the MongoDB container
 if docker ps --format '{{.Names}}' | grep -q "^$mongodb_container$"; then
@@ -20,38 +21,44 @@ else
     echo "Container '$mongodb_container' does not exist."
 fi
 
-# Check if the network exists
-if docker network inspect "$network_name" &>/dev/null; then
-    echo "Inspecting network '$network_name' for connected containers..."
+# Remove the Docker volume
+if docker volume ls --format '{{.Name}}' | grep -q "^$volume_name$"; then
+    echo "Removing volume '$volume_name'."
+    docker volume rm "$volume_name"
+else
+    echo "Volume '$volume_name' does not exist."
+fi
 
-    # Get a list of container names connected to the network
-    container_names=$(docker network inspect -f '{{range $key, $value := .Containers}}{{$value.Name}} {{end}}' "$network_name")
-
-    if [ -n "$container_names" ]; then
-        echo "Found containers connected to the network: $container_names"
-
-        # Loop through the containers and disconnect them
-        for container in $container_names; do
-            echo "Disconnecting container '$container' from network '$network_name'."
-            docker network disconnect "$network_name" "$container"
-        done
-    else
-        echo "No containers connected to the network."
-    fi
-
-    # Remove the network
+# Remove the Docker network
+if docker network ls --format '{{.Name}}' | grep -q "^$network_name$"; then
     echo "Removing network '$network_name'."
     docker network rm "$network_name"
-
-    echo "Network '$network_name' removed successfully."
 else
     echo "Network '$network_name' does not exist."
 fi
 
-pid=$(sudo lsof -i :27017 | awk 'NR==2 {print $2}')
+# Kill any process listening on port 27017
+pid=$(sudo lsof -t -i:27017)
 if [ "$pid" ]; then
+    echo "Killing process on port 27017 with PID $pid."
     sudo kill -9 $pid
+else
+    echo "No process is listening on port 27017."
 fi
 
-rm src/.env 
-rm src/security/* 
+# Remove the .env file and security keys
+if [ -f "src/.env" ]; then
+    echo "Removing src/.env file."
+    rm src/.env
+else
+    echo "src/.env file does not exist."
+fi
+
+if [ -f "$key_path" ] || [ -f "$key_path.pub" ]; then
+    echo "Removing security keys."
+    rm -f "$key_path" "$key_path.pub"
+else
+    echo "Security keys do not exist."
+fi
+
+echo "Cleanup completed."

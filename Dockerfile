@@ -1,9 +1,10 @@
-FROM python:3.12-slim
+FROM python:3
 
 WORKDIR /app
 
+# Update apt and install dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    nano && \
+    gnupg && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

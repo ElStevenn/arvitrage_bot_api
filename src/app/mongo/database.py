@@ -1,4 +1,4 @@
-from pymongo import AsyncMongoClient, 
+from pymongo import AsyncMongoClient
 from urllib.parse import quote_plus
 import socket
 
@@ -15,11 +15,14 @@ https://chatgpt.com/c/6729dbc3-18bc-800e-acc4-47e62229d3cb
 
 class ConnectionMongo():
     def __init__(self):
-
         if hostname == 'mamadocomputer' or hostname == 'pauserver':
-            self.client = AsyncMongoClient(f"mongodb://{MONGO_USER}:{password_encoded}@172.18.0.2:27017/?authSource=admin")
+            self.client = AsyncMongoClient(
+                f"mongodb://{MONGO_USER}:{password_encoded}@localhost:27017/?authSource=admin"
+            )
         else:
-            self.client = AsyncMongoClient(f"mongodb://{MONGO_USER}:{password_encoded}@mongo_container:27017/?authSource=admin")
+            self.client = AsyncMongoClient(
+                f"mongodb://{MONGO_USER}:{password_encoded}@mongo_container:27017/?authSource=admin"
+            )
 
         # Database
         self.db_metadata = self.client["crypto_metadata"]

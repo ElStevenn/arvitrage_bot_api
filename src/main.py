@@ -14,6 +14,7 @@ from src.app.crypto_data_service import CryptoDataService
 from src.app.redis_layer import RedisService
 from src.app.schedule_layer import ScheduleLayer
 from src.app.chart_analysis import FundingRateChart
+from src.app.mongo.database import ConnectionMongo
 from src.app.historcal_funding_rate import MainServiceLayer
 from src.app.schemas import *
 
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 async_scheduler = ScheduleLayer("Europe/Amsterdam")
 redis_memory = RedisService()
 main_services = MainServiceLayer()
+mongod_service = ConnectionMongo()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -197,6 +199,12 @@ async def delete_all_cryptos_analysis():
         
     return response
 
+@app.get("/test")
+async def lol():
+
+    res = await mongod_service.get_databases()
+
+    return res
 
 if __name__ == "__main__":
     import uvicorn

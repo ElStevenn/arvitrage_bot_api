@@ -9,10 +9,10 @@ mongo_username=""
 mongo_password=""
 
 install_docker() {
-    # Function to install docker
+    # Function to install Docker
 
     echo "Docker is not installed. Installing Docker and dependencies..."
-    sudo apt-get update -yes
+    sudo apt-get update -y
     sudo apt-get install -y \
         ca-certificates \
         curl \
@@ -68,10 +68,10 @@ else
     echo "Creating MongoDB container '$mongodb_container'."
     docker pull mongo
 
-    echo "Enter mongodb username"
+    echo "Enter MongoDB username:"
     read mongo_username
 
-    echo "Enter mongodb password"
+    echo "Enter MongoDB password:"
     read -s mongo_password
 
     docker run -d \
@@ -81,7 +81,7 @@ else
         -p 27017:27017 \
         -e MONGO_INITDB_ROOT_USERNAME=$mongo_username \
         -e MONGO_INITDB_ROOT_PASSWORD=$mongo_password \
-        mongo -bind_ip 0.0.0.0
+        mongo --bind_ip_all
 fi
 
 # Ensure MongoDB container is on the correct network
@@ -91,6 +91,10 @@ if ! docker network inspect $network | grep -q "$mongodb_container"; then
 else
     echo "MongoDB container '$mongodb_container' is already connected to network '$network'."
 fi
+
+# Obtain MongoDB container IP address
+mongo_container_ip=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $mongodb_container)
+echo "MongoDB container IP address: $mongo_container_ip"
 
 # Ensure the directory for the key exists
 mkdir -p "$(dirname "$key_path")"
@@ -113,8 +117,8 @@ else
     fi
 fi
 
-# Ask venv required sensitive variables
-echo "Enter coinmarketcap apikey"
+# Ask for required sensitive variables
+echo "Enter CoinMarketCap API key:"
 read coinmarketcap_apikey
 
 # Create src/.env file
@@ -127,7 +131,7 @@ else
 COINMARKETCAP_APIKEY=$coinmarketcap_apikey
 
 # MONGODB CONNECTION
-MONGODB_URL=localhost
+MONGODB_URL=$mongo_container_ip
 MONGO_USER=$mongo_username
 MONGO_PASSWD=$mongo_password
 EOF
@@ -138,11 +142,14 @@ local_ip="127.0.0.1"
 external_ip=$(curl -s http://checkip.amazonaws.com)
 local_mongodb_uri="mongodb://$mongo_username:$mongo_password@$local_ip:27017/admin"
 external_mongodb_uri="mongodb://$mongo_username:$mongo_password@$external_ip:27017/admin"
+container_mongodb_uri="mongodb://$mongo_username:$mongo_password@$mongo_container_ip:27017/admin"
 
 # Display the MongoDB URIs
 echo "MongoDB Connection URIs:"
 echo "Local: $local_mongodb_uri"
 echo "External: $external_mongodb_uri"
+echo "Container IP: $container_mongodb_uri"
+
 
 
 
