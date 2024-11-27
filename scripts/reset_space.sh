@@ -47,3 +47,11 @@ if docker network inspect "$network_name" &>/dev/null; then
 else
     echo "Network '$network_name' does not exist."
 fi
+
+pid=$(sudo lsof -i :27017 | awk 'NR==2 {print $2}')
+if [ "$pid" ]; then
+    sudo kill -9 $pid
+fi
+
+rm src/.env 
+rm src/security/* 

@@ -81,7 +81,7 @@ else
         -p 27017:27017 \
         -e MONGO_INITDB_ROOT_USERNAME=$mongo_username \
         -e MONGO_INITDB_ROOT_PASSWORD=$mongo_password \
-        mongo
+        mongo -bind_ip 0.0.0.0
 fi
 
 # Ensure MongoDB container is on the correct network
@@ -134,6 +134,15 @@ EOF
     echo "src/.env file created successfully."
 fi
 
+local_ip="127.0.0.1"
+external_ip=$(curl -s http://checkip.amazonaws.com)
+local_mongodb_uri="mongodb://$mongo_username:$mongo_password@$local_ip:27017/admin"
+external_mongodb_uri="mongodb://$mongo_username:$mongo_password@$external_ip:27017/admin"
+
+# Display the MongoDB URIs
+echo "MongoDB Connection URIs:"
+echo "Local: $local_mongodb_uri"
+echo "External: $external_mongodb_uri"
 
 
 

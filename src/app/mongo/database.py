@@ -1,4 +1,4 @@
-from pymongo import AsyncMongoClient
+from pymongo import AsyncMongoClient, 
 from urllib.parse import quote_plus
 import socket
 
@@ -17,7 +17,7 @@ class ConnectionMongo():
     def __init__(self):
 
         if hostname == 'mamadocomputer' or hostname == 'pauserver':
-            self.client = AsyncMongoClient(f"mongodb://root:example@172.18.0.2:27017/?authSource=admin")
+            self.client = AsyncMongoClient(f"mongodb://{MONGO_USER}:{password_encoded}@172.18.0.2:27017/?authSource=admin")
         else:
             self.client = AsyncMongoClient(f"mongodb://{MONGO_USER}:{password_encoded}@mongo_container:27017/?authSource=admin")
 
