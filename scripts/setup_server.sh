@@ -8,6 +8,12 @@ key_path="src/security/secure_key"
 mongo_username=""
 mongo_password=""
 
+# Container variables
+container_port=8080
+image_name="funding_rate"
+container_name="funding_ratev1"
+
+
 install_docker() {
     # Function to install Docker
 
@@ -150,8 +156,26 @@ echo "Local: $local_mongodb_uri"
 echo "External: $external_mongodb_uri"
 echo "Container IP: $container_mongodb_uri"
 
+echo ""
+echo ""
+
+echo "Do you want to deploy the app? (y/n)"
+read deplo
+
+# Build and deploy application
+if [ "$deplo" == "y" ];then
+    docker build -t $image_name .
+    docker run -d -p "$container_port:$container_port" --name "$container_name" --network "$network_name" "$image_name"
 
 
+    echo "Do you want to setup the essential data (y/n)"
+    read setup
+
+    if [ "$setup" == "y" ]; then
+        echo "Setting up essential data..."
+    fi
+
+fi
 
 # # Jenkins setup
 
