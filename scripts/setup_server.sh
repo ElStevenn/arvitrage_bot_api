@@ -13,7 +13,6 @@ container_port=8080
 image_name="funding_rate"
 container_name="funding_ratev1"
 
-
 install_docker() {
     # Function to install Docker
 
@@ -166,7 +165,8 @@ read deplo
 if [ "$deplo" == "y" ];then
     clear
     docker build -t $image_name .
-    docker run -d -p $container_port:$container_port --name $container_name --network $network_name $image_name
+    echo "deplo=$deplo, image_name=$image_name, container_port=$container_port, container_name=$container_name, network_name=$network"
+    docker run -d -p $container_port:$container_port --name $container_name --network $network $image_name
 
 
     echo "Do you want to setup the essential data (y/n)"
