@@ -164,6 +164,7 @@ read deplo
 
 # Build and deploy application
 if [ "$deplo" == "y" ];then
+    clear
     docker build -t $image_name .
     docker run -d -p $container_port:$container_port --name $container_name --network $network_name $image_name
 
