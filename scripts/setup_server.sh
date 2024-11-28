@@ -86,16 +86,12 @@ else
         -p 27017:27017 \
         -e MONGO_INITDB_ROOT_USERNAME=$mongo_username \
         -e MONGO_INITDB_ROOT_PASSWORD=$mongo_password \
-        mongo --bind_ip_all
+        mongo --bind_ip 0.0.0.0
+
 fi
 
-# Ensure MongoDB container is on the correct network
-if ! docker network inspect $network | grep -q "$mongodb_container"; then
-    echo "Connecting MongoDB container '$mongodb_container' to network '$network'."
-    docker network connect $network $mongodb_container
-else
-    echo "MongoDB container '$mongodb_container' is already connected to network '$network'."
-fi
+docker network connect $network $mongodb_container
+
 
 # Obtain MongoDB container IP address
 mongo_container_ip=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $mongodb_container)
@@ -165,9 +161,8 @@ read deplo
 if [ "$deplo" == "y" ];then
     clear
     docker build -t $image_name .
-    echo "deplo=$deplo, image_name=$image_name, container_port=$container_port, container_name=$container_name, network_name=$network"
     docker run -d -p $container_port:$container_port --name $container_name --network $network $image_name
-
+    docmer network connect $network $container_name
     
     echo "app deployed at http://$external_mongodb_uri:8080"
     echo "Do you want to setup the essential data (y/n)"

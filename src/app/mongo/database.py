@@ -2,7 +2,7 @@ from pymongo import AsyncMongoClient
 from urllib.parse import quote_plus
 import socket
 
-from src.config import MONGO_USER, MONGO_PASSWD
+from src.config import MONGO_USER, MONGO_PASSWD, MONGODB_URL
 import asyncio
 
 hostname = socket.gethostname()
@@ -21,7 +21,7 @@ class ConnectionMongo:
             )
         else:
             self.client = AsyncMongoClient(
-                f"mongodb://{MONGO_USER}:{password_encoded}@mongo_container:27017/?authSource=admin"
+                f"mongodb://{MONGO_USER}:{password_encoded}@mongodb_v1:27017/?authSource=admin"
             )
 
         # Database

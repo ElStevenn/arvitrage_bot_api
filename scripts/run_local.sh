@@ -23,6 +23,7 @@ if [ "$response" == "y" ]; then
 
     # Run the container
     docker run -d -p "$container_port:$container_port" --name "$container_name" --network "$network_name" "$image_name"
+    docker network connect $network_name "$container_name"
 
     echo "Waiting for container to start..."
     sleep 2
