@@ -1,22 +1,13 @@
 
 
-#### Set mondodb password
- - Set password
- ```bash
-    export TF_VAR_mongo_root_username="mongodb_username"
-    export TF_VAR_mongo_root_password="mongodb_password"
- ```
- - Push changes to terraform
- ```bash
-    terraform apply
- ```
+### Setup workspace within a server
 
- - when prompted
+ - Step 1, given enough permissions
+```bash
+   chmod +x scripts/*
+```
+ - Step 2, run setup script 
  ```bash
-    var.mongo_root_password
+   ./scripts/setup_server.sh
  ```
-
-### Other needed files
- - sensitive.tfvars
-
-This file is where all the sensitive and non-sensitive variables goes. 
+ 

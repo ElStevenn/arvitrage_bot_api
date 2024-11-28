@@ -18,21 +18,7 @@ echo "Build and run container? (y/n)"
 read response
 
 if [ "$response" == "y" ]; then
-    # Build the image
-    docker build -t "$image_name" .
-
-    # Run the container
-    docker run -d -p "$container_port:$container_port" --name "$container_name" --network "$network_name" "$image_name"
-
-    echo "Waiting for container to start..."
-    sleep 2
-
-    echo "Show terminal logs? (y/n)"
-    read term_qstn
-
-    if [ "$term_qstn" == "y" ]; then
-        docker logs --follow "$container_name"
-    fi
+    source scripts/run_local.sh
 else
     echo "Operation aborted."
 fi
