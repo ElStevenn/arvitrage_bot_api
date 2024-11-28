@@ -165,7 +165,7 @@ read deplo
 # Build and deploy application
 if [ "$deplo" == "y" ];then
     docker build -t $image_name .
-    docker run -d -p "$container_port:$container_port" --name "$container_name" --network "$network_name" "$image_name"
+    docker run -d -p $container_port:$container_port --name $container_name --network $network_name $image_name
 
 
     echo "Do you want to setup the essential data (y/n)"

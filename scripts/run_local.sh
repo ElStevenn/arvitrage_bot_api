@@ -14,11 +14,3 @@ if docker images --format '{{.Repository}}' | grep -q "^$image_name$"; then
     docker image rm "$image_name"
 fi
 
-echo "Build and run container? (y/n)"
-read response
-
-if [ "$response" == "y" ]; then
-    source scripts/run_local.sh
-else
-    echo "Operation aborted."
-fi
