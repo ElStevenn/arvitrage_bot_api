@@ -37,6 +37,7 @@ async def lifespan(app: FastAPI):
     # Schedule the daily crypto_rebase job at 9:00 AM Spanish time
     async_scheduler.schedule_daily_job(9, 0, main_services.crypto_rebase)
 
+    """
     # Calculate the next 2 AM in Europe/Amsterdam timezone and set the params (exec_time)
     next_run_time = main_services.get_next_funding_rate(8)
     logger.info(f"Next run time for schedule_set_analysis: {next_run_time}")
@@ -50,7 +51,7 @@ async def lifespan(app: FastAPI):
         start_date=next_run_time,
         **params1
     )
- 
+    """
     try:
         yield
     finally:

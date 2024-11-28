@@ -13,7 +13,7 @@ https://chatgpt.com/c/6729dbc3-18bc-800e-acc4-47e62229d3cb
 
 """
 
-class ConnectionMongo():
+class ConnectionMongo:
     def __init__(self):
         if hostname == 'mamadocomputer' or hostname == 'pauserver':
             self.client = AsyncMongoClient(

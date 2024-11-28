@@ -168,9 +168,12 @@ if [ "$deplo" == "y" ];then
     echo "deplo=$deplo, image_name=$image_name, container_port=$container_port, container_name=$container_name, network_name=$network"
     docker run -d -p $container_port:$container_port --name $container_name --network $network $image_name
 
-
+    
+    echo "app deployed at http://$external_mongodb_uri:8080"
     echo "Do you want to setup the essential data (y/n)"
     read setup
+
+    
 
     if [ "$setup" == "y" ]; then
         echo "Setting up essential data..."

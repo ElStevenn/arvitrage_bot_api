@@ -1,6 +1,7 @@
 FROM python:3
 
-WORKDIR /app
+# Set the working directory to the root
+WORKDIR /
 
 # Update apt and install dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -9,12 +10,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 # Copy requirements.txt and install dependencies
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt /requirements.txt
+RUN pip install --no-cache-dir -r /requirements.txt
 
-# Copy source code
-COPY src /app/src
+COPY . .
 
+# Expose the application's port
 EXPOSE 8080
 
+# Run the application
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080"]

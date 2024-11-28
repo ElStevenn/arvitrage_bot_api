@@ -7,7 +7,7 @@ import numpy as np
 import logging
 import time as lowtime
 from typing import Tuple, Literal
-from config import COINMARKETCAP_APIKEY
+from src.config import COINMARKETCAP_APIKEY
 
 from src.app.crypto_data_service import CryptoDataService
 from src.app.mongo.controller import MongoDB_Crypto

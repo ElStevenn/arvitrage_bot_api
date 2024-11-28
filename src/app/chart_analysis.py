@@ -4,13 +4,13 @@ import pandas as pd
 import numpy as np
 import asyncio
 
-from src.app.bitget_layer import BitgetService, Granularity
+from src.app.crypto_data_service import CryptoDataService, Granularity
 
 class FundingRateChart:
     
     def __init__(self, symbol):
         self.symbol = symbol
-        self.bitget_service = BitgetService()
+        self.bitget_service = CryptoDataService()
         self.df8h = None
         self.df10m = None
         self.dfdialy = None

@@ -14,3 +14,25 @@ if docker images --format '{{.Repository}}' | grep -q "^$image_name$"; then
     docker image rm "$image_name"
 fi
 
+echo "Build and run container? (y/n)"
+read response
+
+if [ "$response" == "y" ]; then
+    # Build the image
+    docker build -t "$image_name" .
+
+    # Run the container
+    docker run -d -p "$container_port:$container_port" --name "$container_name" --network "$network_name" "$image_name"
+
+    echo "Waiting for container to start..."
+    sleep 2
+
+    echo "Show terminal logs? (y/n)"
+    read term_qstn
+
+    if [ "$term_qstn" == "y" ]; then
+        docker logs --follow "$container_name"
+    fi
+else
+    echo "Operation aborted."
+fi

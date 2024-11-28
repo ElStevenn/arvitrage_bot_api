@@ -1,0 +1,74 @@
+.
+├── deployment
+│   ├── docker-comose.yaml
+│   └── k8s
+│       ├── configmap.yaml
+│       ├── mongodb
+│       │   ├── deployment.yaml
+│       │   ├── secrets.yaml
+│       │   └── service.yaml
+│       └── python
+│           ├── python.yaml
+│           └── secrets.yaml
+├── Dockerfile
+├── infra
+│   └── terraform
+│       ├── main.tf
+│       ├── sensitive.tfvars
+│       ├── terraform.tfstate
+│       ├── terraform.tfstate.backup
+│       └── variables.tf
+├── Jenkinsfile
+├── readme.md
+├── requirements.txt
+├── scripts
+│   ├── pre_commit_checks.sh
+│   ├── reset_space.sh
+│   ├── run_local.sh
+│   └── setup_server.sh
+├── src
+│   ├── app
+│   │   ├── chart_analysis.py
+│   │   ├── crypto_data_service.py
+│   │   ├── historcal_funding_rate.py
+│   │   ├── __init__.py
+│   │   ├── mongo
+│   │   │   ├── crud.py
+│   │   │   ├── database.py
+│   │   │   ├── __pycache__
+│   │   │   │   └── database.cpython-312.pyc
+│   │   │   ├── schema.py
+│   │   │   └── setup_essentials.py
+│   │   ├── __pycache__
+│   │   │   ├── bitget_layer.cpython-312.pyc
+│   │   │   ├── bitget_layer.cpython-38.pyc
+│   │   │   ├── chart_analysis.cpython-312.pyc
+│   │   │   ├── historcal_funding_rate.cpython-312.pyc
+│   │   │   ├── __init__.cpython-312.pyc
+│   │   │   ├── __init__.cpython-38.pyc
+│   │   │   ├── redis_layer.cpython-312.pyc
+│   │   │   ├── redis_layer.cpython-38.pyc
+│   │   │   ├── schedule_layer.cpython-312.pyc
+│   │   │   ├── schedule_layer.cpython-38.pyc
+│   │   │   └── schemas.cpython-312.pyc
+│   │   ├── redis_layer.py
+│   │   ├── schedule_layer.py
+│   │   └── schemas.py
+│   ├── config.py
+│   ├── main.py
+│   ├── __pycache__
+│   │   └── config.cpython-312.pyc
+│   ├── scripts
+│   │   ├── candle_proofs.py
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   │   ├── __init__.cpython-312.pyc
+│   │   │   └── setup_crypto_fr.cpython-312.pyc
+│   │   └── setup_crypto_fr.py
+│   └── security
+│       ├── instance_key.pem
+│       ├── secure_key
+│       └── secure_key.pub
+└── wtf.txt
+
+17 directories, 55 files
