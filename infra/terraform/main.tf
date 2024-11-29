@@ -102,8 +102,8 @@ resource "aws_instance" "historical_funding_rate" {
       "sudo systemctl enable jenkins",
 
       # Run setup server
-      "chmod +x setup_server.sh",
-      "./setup_server.sh",
+      "chmod +x scripts/*",
+      "./scripts/setup_server.sh",
       
       # Call CI Pipeline (at this moment just build container)
       "docker build -t funding_rate .",

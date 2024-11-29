@@ -3,10 +3,16 @@ import numpy as np
 import pandas as pd
 import aiohttp
 import pytz
-from fastapi.encoders import jsonable_encoder
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from typing import Literal
+import re
+
+from fastapi import HTTPException
+from fastapi.encoders import jsonable_encoder
+
+from src.config import AVARIABLE_EXCHANGES, COINMARKETCAP_APIKEY
+from fastapi import HTTPException
 
 class Granularity:
     MINUTE_1 = '60'
@@ -19,6 +25,13 @@ class Granularity:
 class CryptoDataService:
     def __init__(self) -> None:
         self.max_pages = 5
+
+        # Exchanges url
+        self.bitget_url = "https://api.bitget.com"
+        self.binance_url = "https://fapi.binance.com"
+        
+        # External apis URL
+        self.coinmarketcap_url = "https://pro-api.coinmarketcap.com"
 
     async def get_historical_funding_rate(self, symbol: str,):
         """
@@ -123,7 +136,7 @@ class CryptoDataService:
                         raise ValueError(f"Unexpected time difference: {difference}")
 
 
-    async def get_all_cryptos(self) -> np.ndarray:
+    async def get_all_cryptos(self) -> np.ndarray: # DEPRECIATED
         url = "https://api.bitget.com/api/v2/mix/market/tickers"
         params = {
             "productType": "USDT-FUTURES"
@@ -268,28 +281,112 @@ class CryptoDataService:
             timestamp = datetime.fromtimestamp(int(period) / 1000, pytz.timezone('Europe/Amsterdam'))
             raise ValueError(f"Period {timestamp} doesn't exist")
 
+    async def get_all_symbols(self, exchange: str) -> np.ndarray:
+        """Get all cryptos in futures from a given exchange"""
+        if exchange not in AVARIABLE_EXCHANGES:
+            raise ValueError(f"Exchange {exchange} not supported")
+        
+        if exchange == 'bitget':
+            url = self.bitget_url + '/api/v2/mix/market/tickers'
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params={'productType': 'USDT-FUTURES'}) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        cryptos = result.get('data')
+                        result = np.array([crypto["symbol"] for crypto in cryptos])
+
+                        return result
+                    else:
+                        response = await response.text()
+                        raise ValueError(f"An error ocurred, status {response.status}, whole error: {response}")
+        elif exchange == 'binance':
+            url = self.binance_url + "/api/v3/ticker/price"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        result = await response.json()
+
+                        # Extract all symbols from the result
+                        cryptos = np.array([crypto["symbol"] for crypto in result])
+                        return cryptos
+                    else:
+                        # Correctly handle the error
+                        error_message = await response.text()
+                        raise ValueError(f"An error occurred. Status: {response.status}. Error: {error_message}")
+
+    async def get_symbol_metadata(self, symbol: str):
+        """Get metada from a given symbol"""
+        url = self.coinmarketcap_url + "/v1/cryptocurrency/info"
+        headers = {
+            'X-CMC_PRO_API_KEY': COINMARKETCAP_APIKEY
+        }
+
+        if symbol.lower().endswith('usdt'):
+            symbol = symbol[:-4]
+        elif symbol.lower().endswith('usd'):
+            symbol = symbol[:-3]
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, params={'symbol': symbol}) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    data = result.get('data').get(symbol)
+
+                    return {
+                        "symbol": data.get('symbol'),
+                        "name": data.get('name'),
+                        "description": data.get('description'),
+                        "logo": data.get('logo').replace('64', '128'),
+                        "urls": data.get('urls'),
+                        "date_added": data.get('date_added'),
+                        "tags": data.get('tags')
+                    }
+
+                elif response.status == 400:
+                        raise HTTPException(status_code=404, detail="Symbol not found")
+
+    async def get_funding_rate_interval(self, symbol: str) -> int:
+        """Determine funding rate interval (4h or 8h) from Bitget."""
+
+        # BITGET ATTEMPT
+        url = f"{self.bitget_url}/api/v2/mix/market/history-fund-rate?symbol={symbol}&productType=usdt-futures"
+        async with aiohttp.ClientSession() as session:
+            async with  session.get(url) as response:
+                data = await response.json()
+                if data.get("code") == "00000" and "data" in data:
+                    times = [int(entry["fundingTime"]) for entry in data["data"]]
+                    if len(times) > 1:
+                        interval_ms = abs(times[0] - times[1])
+                        return f"{int(interval_ms / 3600000)}"     
+        
+        # BINANCE ATTEMPT
+        binance_url = f"{self.binance_url}/fapi/v1/fundingInfo"
+        symbol = re.sub(r"(USDT|USD)$", "", symbol, flags=re.IGNORECASE)
+        symbol_pattern = re.compile(re.escape(symbol), re.IGNORECASE)
+        async with aiohttp.ClientSession() as session:
+            response = await session.get(binance_url)
+            data = await response.json()
+            for entry in data:
+                if symbol_pattern.search(entry.get("symbol", "")):
+                    return int(entry['fundingIntervalHours'])
+        return None
+    
+        
+
+
+    async def get_general_exchange_metadata(self, symbol):
+        funding_rate = await self.get_funding_rate_interval(symbol)
 
 
 async def main_testing():
-    start_time = int(datetime.now().timestamp() * 1000) - (5 * 60 * 1000)  # Earlier time
-    end_time = int(datetime.now().timestamp() * 1000)  # Later time
+    start_time = int(datetime.now().timestamp() * 1000) - (5 * 60 * 1000)  
+    end_time = int(datetime.now().timestamp() * 1000)  
 
-    bitget_layer = BitgetService()
+    crypto_daya = CryptoDataService()
 
-    print(await bitget_layer.get_price_of_period('BTCUSDT', start_time))
 
-    """
-    granularity = '1H'  
+    res = await crypto_daya.get_funding_rate_interval('ETH'); print("function result: ", res)
 
-    res = await bitget_layer.get_candlestick_chart('BTCUSDT', granularity, start_time, end_time)
-    print(res)
-    print("length -> ", len(res))
-
-    df = pd.DataFrame(res, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'notional'])
-    df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
-    df.to_csv('delete_this.csv', index=False)
-
-    print(df)
-    """
 if __name__ == "__main__":
     asyncio.run(main_testing())

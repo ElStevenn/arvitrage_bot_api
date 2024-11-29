@@ -81,9 +81,9 @@ app.add_middleware(
 )
 
 
-@app.get("/historical_funding_rate/{symbol}", 
+@app.get("/funding-rate/history/{symbol}", 
     description="### Get Historical Funding Rates\n\n From a given symbol returns a list with the historical funding rate and if there was a controversial period, provides an analysis about what happened with the price", 
-    tags=["Base Funding Rate"])
+    tags=["Funding Rate"])
 async def get_historical_funding_rate(
     symbol: str = Path(..., description="Symbol to be searched"),  
     limit: Optional[int] = Query(50, ge=10, lt=500, description="Number of given data") 
@@ -108,7 +108,7 @@ async def get_historical_funding_rate(
     else:
         return []
 
-@app.get("/today_analysis/{symbol}", description="### Get today analysis from a given crypto\n\n", tags=["Crypto Analysis"])
+@app.get("/crypto-analysis/today/{symbol}", description="### Get today analysis from a given crypto\n\n", tags=["Crypto Analysis"])
 async def get_today_analysis(symbol: str):
     chart_analysis = FundingRateChart(symbol)
     period = int(datetime.now(timezone.utc).timestamp() * 1000)
@@ -119,7 +119,7 @@ async def get_today_analysis(symbol: str):
     return analysis
 
 
-@app.get("/detail_event/{symbol}", description="Get name and logo of the crypto", tags=["Crypto Search"],  response_model=Crypto)
+@app.get("/crypto/detail/{symbol}", description="Get name and logo of the crypto", tags=["Crypto"],  response_model=Crypto)
 async def get_detail_event(symbol: str):
     try:
         crypto_metadata = redis_memory.get_crypto_metadata(symbol)
@@ -144,7 +144,7 @@ async def get_detail_event(symbol: str):
 
 
 @app.get(
-    "/search",
+    "/crypto/search",
     description= """
                 ### Search for cryptocurrencies based on a query. If no query is provided, returns all cryptos sorted by 'id'.
                 
@@ -152,7 +152,7 @@ async def get_detail_event(symbol: str):
                 - **limit**: The maximum number of results to return (default: 50, max: 100).
                 - **offset**: The number of results to skip for pagination (default: 0).
                 """,
-    tags=["Crypto Search"],
+    tags=["Crypto"],
     response_model=List[CryptoSearch]
 )
 async def search_crypto(
@@ -168,7 +168,7 @@ async def search_crypto(
     return response
  
 
-@app.websocket("/search-crypto-ws")
+@app.websocket("/crypto/search/ws")
 async def websocket_search_crypto(websocket: WebSocket):
     await websocket.accept()
     try:

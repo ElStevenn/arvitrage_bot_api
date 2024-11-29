@@ -24,17 +24,6 @@ class ConnectionMongo:
                 f"mongodb://{MONGO_USER}:{password_encoded}@mongodb_v1:27017/?authSource=admin"
             )
 
-        # Database
-        self.db_metadata = self.client["crypto_metadata"]
-        self.db_historical_funding_rate = self.client["historical_funding_rate"]
-
-        # Metadata Collections
-        self.crypto_collection = self.db_metadata["crypto"]
-        self.crypto_list_collection = self.db_metadata["crypto_list"]
-
-        # Historical funding rate Collections
-        self.count_collection = self.db_historical_funding_rate["count"]
-
     async def get_databases(self):
         databases = await self.client.list_database_names()
         return databases

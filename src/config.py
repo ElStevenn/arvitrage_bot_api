@@ -12,7 +12,6 @@ MONGODB_URL = os.getenv('MONGODB_URL', 'mongodb://localhost:27017')
 MONGO_USER = os.getenv('MONGO_USER', 'mongo_user')
 MONGO_PASSWD = os.getenv('MONGO_PASSWD', 'mongo_password')
 
-
 # API-KEYS
 COINMARKETCAP_APIKEY = os.getenv('COINMARKETCAP_APIKEY', 'coinmarketcap-apikey')
 
@@ -38,3 +37,5 @@ def load_private_key(path):
 PUBLIC_KEY = load_public_key('src/security/secure_key.pub')
 PRIVATE_KEY = load_private_key('src/security/secure_key')
 
+# UTILS
+AVARIABLE_EXCHANGES = ['bitget', 'binance']
