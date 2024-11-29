@@ -105,10 +105,6 @@ resource "aws_instance" "historical_funding_rate" {
       "chmod +x scripts/*",
       "./scripts/setup_server.sh",
       
-      # Call CI Pipeline (at this moment just build container)
-      "docker build -t funding_rate .",
-      "docker run -d --name funding_rate_v1 -p 8080:8080"
-
 
 
      ]
