@@ -122,6 +122,9 @@ fi
 echo "Enter CoinMarketCap API key:"
 read coinmarketcap_apikey
 
+echo "Enter Web3 infrastructure project ID:"
+read infra_project_id
+
 # Create src/.env file
 if [ -f "src/.env" ]; then
     echo "src/.env file already exists."
@@ -135,6 +138,10 @@ COINMARKETCAP_APIKEY=$coinmarketcap_apikey
 MONGODB_URL=$mongo_container_ip
 MONGO_USER=$mongo_username
 MONGO_PASSWD=$mongo_password
+
+# Web3 infrastructure
+INFRA_PROJECT_ID=$infra_project_id
+
 EOF
     echo "src/.env file created successfully."
 fi

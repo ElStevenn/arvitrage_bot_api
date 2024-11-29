@@ -10,8 +10,10 @@ import re
 
 from fastapi import HTTPException
 from fastapi.encoders import jsonable_encoder
+from web3 import AsyncWeb3, Web3
+from web3 import AsyncHTTPProvider
 
-from src.config import AVARIABLE_EXCHANGES, COINMARKETCAP_APIKEY
+from src.config import AVARIABLE_EXCHANGES, COINMARKETCAP_APIKEY, INFURA_APIKEY
 from fastapi import HTTPException
 
 class Granularity:
@@ -24,15 +26,22 @@ class Granularity:
 
 class CryptoDataService:
     def __init__(self) -> None:
-        self.max_pages = 5
-
-        # Exchanges url
+        # Exchanges URL
         self.bitget_url = "https://api.bitget.com"
         self.binance_url = "https://fapi.binance.com"
         
-        # External apis URL
+        # External APIs URL
         self.coinmarketcap_url = "https://pro-api.coinmarketcap.com"
+        
+        # Web3
+        self.infura_url = f"https://mainnet.infura.io/v3/{INFURA_APIKEY}"
+        self.web3 = Web3(Web3.HTTPProvider(self.infura_url))
 
+        if self.web3.is_connected():
+            print("Connected to Ethereum")
+        else:
+            raise Exception("Failed to connect to Ethereum")
+        
     async def get_historical_funding_rate(self, symbol: str,):
         """
         Return: [[funding_rate, datetime_period, period]] 
@@ -40,7 +49,7 @@ class CryptoDataService:
         """
         final_result = np.empty((0, 3))  
 
-        for page_number in range(1, self.max_pages + 1): 
+        for page_number in range(1, 5 + 1): 
             url = f"https://api.bitget.com/api/v2/mix/market/history-fund-rate?pageSize=100&pageNo={page_number}"
             params = {"symbol": symbol, "productType": "USDT-FUTURES"}
 
@@ -301,55 +310,79 @@ class CryptoDataService:
                         response = await response.text()
                         raise ValueError(f"An error ocurred, status {response.status}, whole error: {response}")
         elif exchange == 'binance':
-            url = self.binance_url + "/api/v3/ticker/price"
-            async with aiohttp.ClientSession() as session:
+            url = self.binance_url + "/fapi/v1/exchangeInfo"
+            headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            async with aiohttp.ClientSession(headers=headers) as session:
                 async with session.get(url) as response:
                     if response.status == 200:
-                        result = await response.json()
-
-                        # Extract all symbols from the result
-                        cryptos = np.array([crypto["symbol"] for crypto in result])
-                        return cryptos
+                        data = await response.json()
+                        # Extract all symbols
+                        symbols = np.array([symbol["symbol"] for symbol in data["symbols"]])
+                        return symbols
                     else:
-                        # Correctly handle the error
                         error_message = await response.text()
-                        raise ValueError(f"An error occurred. Status: {response.status}. Error: {error_message}")
+                        raise ValueError(f"Error {response.status}: {error_message}")
 
     async def get_symbol_metadata(self, symbol: str):
-        """Get metada from a given symbol"""
-        url = self.coinmarketcap_url + "/v1/cryptocurrency/info"
-        headers = {
-            'X-CMC_PRO_API_KEY': COINMARKETCAP_APIKEY
-        }
+        """Get metadata from a given symbol using CoinGecko API"""
+        symbol = symbol.lower().replace('usdt', '').replace('usd', '').strip()
 
-        if symbol.lower().endswith('usdt'):
-            symbol = symbol[:-4]
-        elif symbol.lower().endswith('usd'):
-            symbol = symbol[:-3]
+        if symbol.lower().startswith('btc'):
+            print("Cannot process this")
+            return None
 
+        # Get Coin ID from CoinGecko
+        coin_list_url = "https://api.coingecko.com/api/v3/coins/list"
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, params={'symbol': symbol}) as response:
+            async with session.get(coin_list_url) as response:
                 if response.status == 200:
-                    result = await response.json()
-                    data = result.get('data').get(symbol)
+                    coins = await response.json()
+                    coin_id = None
+                    for coin in coins:
+                        if coin['symbol'].lower() == symbol.lower():
+                            coin_id = coin['id']
+                            break
+                    if not coin_id:
+                        raise ValueError(f"No coin found with symbol: {symbol}")
+                else:
+                    text_response = await response.text()
+                    raise Exception(f"API Error: {response.status}, {text_response}")
+
+        # Get coin data including decimals
+        coin_data_url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(coin_data_url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    # Extract platforms and contract addresses
+                    platforms = data.get('platforms', {})
+                    # Extract decimals if available
+                    token_decimals = data.get('detail_platforms', {}).get('ethereum', {}).get('decimal_place')
 
                     return {
                         "symbol": data.get('symbol'),
                         "name": data.get('name'),
-                        "description": data.get('description'),
-                        "logo": data.get('logo').replace('64', '128'),
-                        "urls": data.get('urls'),
-                        "date_added": data.get('date_added'),
-                        "tags": data.get('tags')
+                        "description": data.get('description', {}).get('en', ''),
+                        "logo": data.get('image', {}).get('large'),
+                        "urls": data.get('links', {}),
+                        "date_added": data.get('genesis_date'),
+                        "tags": data.get('categories'),
+                        "contract_address": platforms.get('ethereum'),
+                        "platforms": platforms,
+                        "decimals": token_decimals,
                     }
+                else:
+                    text_response = await response.text()
+                    raise Exception(f"API Error: {response.status}, {text_response}")
 
-                elif response.status == 400:
-                        raise HTTPException(status_code=404, detail="Symbol not found")
 
     async def get_funding_rate_interval(self, symbol: str) -> int:
         """Determine funding rate interval (4h or 8h) from Bitget."""
 
         # BITGET ATTEMPT
+        
         url = f"{self.bitget_url}/api/v2/mix/market/history-fund-rate?symbol={symbol}&productType=usdt-futures"
         async with aiohttp.ClientSession() as session:
             async with  session.get(url) as response:
@@ -358,7 +391,8 @@ class CryptoDataService:
                     times = [int(entry["fundingTime"]) for entry in data["data"]]
                     if len(times) > 1:
                         interval_ms = abs(times[0] - times[1])
-                        return f"{int(interval_ms / 3600000)}"     
+                        return f"{int(interval_ms / 3600000)}" 
+        
         
         # BINANCE ATTEMPT
         binance_url = f"{self.binance_url}/fapi/v1/fundingInfo"
@@ -372,21 +406,52 @@ class CryptoDataService:
                     return int(entry['fundingIntervalHours'])
         return None
     
+    async def get_general_exchange_metadata(self, symbol):
+        funding_rate = await self.get_general_exchange_metadata(symbol=symbol)
         
 
+    async def get_token_decimals(self, metadata):
+        """Get the decimals of a token given its metadata"""
+        decimals = metadata.get('decimals')
+        if decimals is not None:
+            print(f"Decimals from metadata: {decimals}")
+            return decimals
 
-    async def get_general_exchange_metadata(self, symbol):
-        funding_rate = await self.get_funding_rate_interval(symbol)
+        contract_address = metadata.get('contract_address')
+        if not contract_address:
+            raise ValueError("No contract address available to fetch decimals.")
+
+        abi = [
+            {
+                "constant": True,
+                "inputs": [],
+                "name": "decimals",
+                "outputs": [{"name": "", "type": "uint8"}],
+                "type": "function",
+            }
+        ]
+
+        contract = self.web3.eth.contract(address=self.web3.to_checksum_address(contract_address), abi=abi)
+
+        # Call the decimals method
+        try:
+            decimals = contract.functions.decimals().call()
+            print(f"Token Decimals from contract: {decimals}")
+            return decimals
+        except Exception as e:
+            print(f"Error retrieving decimals from contract: {e}")
+            raise
+
 
 
 async def main_testing():
     start_time = int(datetime.now().timestamp() * 1000) - (5 * 60 * 1000)  
     end_time = int(datetime.now().timestamp() * 1000)  
 
-    crypto_daya = CryptoDataService()
+    crypto_data = CryptoDataService()
 
+    res = await crypto_data.get_all_symbols('binance'); print(res)
 
-    res = await crypto_daya.get_funding_rate_interval('ETH'); print("function result: ", res)
 
 if __name__ == "__main__":
     asyncio.run(main_testing())

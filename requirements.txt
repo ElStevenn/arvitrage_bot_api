@@ -16,3 +16,4 @@ websockets
 cryptography
 paramiko
 pymongo
+web3

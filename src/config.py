@@ -15,6 +15,9 @@ MONGO_PASSWD = os.getenv('MONGO_PASSWD', 'mongo_password')
 # API-KEYS
 COINMARKETCAP_APIKEY = os.getenv('COINMARKETCAP_APIKEY', 'coinmarketcap-apikey')
 
+# WEB3
+INFURA_APIKEY = os.getenv('INFURA_APIKEY', 'infura-apikey')
+
 # SECURITY
 def load_public_key(path):
     """

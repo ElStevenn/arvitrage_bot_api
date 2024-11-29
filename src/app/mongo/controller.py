@@ -40,16 +40,20 @@ class MongoDB_Crypto(ConnectionMongo):
         return [doc["symbol"] for doc in documents]
 
 
-    
+
     async def add_new_symbol(self, symbol: str, exchange: str):
         """
         Adds a new symbol to the collection.
         """
         await self.crypto_collection.update_one(
             {"symbol": symbol},
-            {"$setOnInsert": {"symbol": symbol, "exchange": exchange}},  
+            {
+                "$setOnInsert": {"symbol": symbol},  # Initialize 'symbol' if the document is inserted
+                "$addToSet": {"exchange": exchange}  # Add 'exchange' to the array if not already present
+            },
             upsert=True
         )
+
 
     async def remove_symbol(self, symbol: str):
         """

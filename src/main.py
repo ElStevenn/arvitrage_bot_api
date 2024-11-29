@@ -18,6 +18,8 @@ from src.app.mongo.database import ConnectionMongo
 from src.app.historcal_funding_rate import MainServiceLayer
 from src.app.schemas import *
 
+from src.scripts.setup_essentials import retrive_list_symbol, set_metadata_symbols
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -200,11 +202,9 @@ async def delete_all_cryptos_analysis():
         
     return response
 
-@app.get("/test")
-async def lol():
-
-    res = await mongod_service.get_databases()
-
+@app.get("/setup")
+async def setup_enviroment():
+    res = await retrive_list_symbol()
     return res
 
 if __name__ == "__main__":
