@@ -34,13 +34,13 @@ class CryptoDataService:
         self.coinmarketcap_url = "https://pro-api.coinmarketcap.com"
         
         # Web3
-        self.infura_url = f"https://mainnet.infura.io/v3/{INFURA_APIKEY}"
-        self.web3 = Web3(Web3.HTTPProvider(self.infura_url))
+        # self.infura_url = f"https://mainnet.infura.io/v3/{INFURA_APIKEY}"
+        # self.web3 = Web3(Web3.HTTPProvider(self.infura_url))
 
-        if self.web3.is_connected():
-            print("Connected to Ethereum")
-        else:
-            raise Exception("Failed to connect to Ethereum")
+        # if self.web3.is_connected():
+            # print("Connected to Ethereum")
+        # else:
+            # raise Exception("Failed to connect to Ethereum")
         
     async def get_historical_funding_rate(self, symbol: str,):
         """
