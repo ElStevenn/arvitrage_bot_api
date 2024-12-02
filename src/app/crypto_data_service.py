@@ -10,8 +10,8 @@ import re
 
 from fastapi import HTTPException
 from fastapi.encoders import jsonable_encoder
-from web3 import AsyncWeb3, Web3
-from web3 import AsyncHTTPProvider
+# from web3 import AsyncWeb3, Web3
+# from web3 import AsyncHTTPProvider
 
 from src.config import AVARIABLE_EXCHANGES, COINMARKETCAP_APIKEY, INFURA_APIKEY
 from fastapi import HTTPException
@@ -333,49 +333,33 @@ class CryptoDataService:
             print("Cannot process this")
             return None
 
-        # Get Coin ID from CoinGecko
-        coin_list_url = "https://api.coingecko.com/api/v3/coins/list"
+        coin_data_url = self.coinmarketcap_url + f"/v1/cryptocurrency/info?symbol={symbol}"
+        headers = {
+            "X-CMC_PRO_API_KEY": COINMARKETCAP_APIKEY
+        }
         async with aiohttp.ClientSession() as session:
-            async with session.get(coin_list_url) as response:
+            async with session.get(coin_data_url, headers=headers) as response:
                 if response.status == 200:
-                    coins = await response.json()
-                    coin_id = None
-                    for coin in coins:
-                        if coin['symbol'].lower() == symbol.lower():
-                            coin_id = coin['id']
-                            break
-                    if not coin_id:
-                        raise ValueError(f"No coin found with symbol: {symbol}")
-                else:
-                    text_response = await response.text()
-                    raise Exception(f"API Error: {response.status}, {text_response}")
-
-        # Get coin data including decimals
-        coin_data_url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(coin_data_url) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    # Extract platforms and contract addresses
-                    platforms = data.get('platforms', {})
-                    # Extract decimals if available
-                    token_decimals = data.get('detail_platforms', {}).get('ethereum', {}).get('decimal_place')
+                    result = await response.json()
+                    data = result.get('data', {}).get(symbol.upper(), {})# ; print(data)
 
                     return {
                         "symbol": data.get('symbol'),
                         "name": data.get('name'),
-                        "description": data.get('description', {}).get('en', ''),
-                        "logo": data.get('image', {}).get('large'),
-                        "urls": data.get('links', {}),
-                        "date_added": data.get('genesis_date'),
-                        "tags": data.get('categories'),
-                        "contract_address": platforms.get('ethereum'),
-                        "platforms": platforms,
-                        "decimals": token_decimals,
+                        "description": data.get('description', {}),
+                        "logo": data.get('logo', {}).replace('64', '128'),
+                        "urls": data.get('urls', {}),
+                        "tags": data.get('tags'),
+                        "contract_address": data.get('contract_address'),
                     }
+                    
                 else:
+                    if response.status == 400:
+                        print(f"Couldn't find {symbol}")
+                        return {"symbol": None, "name": None, "description": None, "logo": None, "urls": None, "tags": None, "contract_address": None}
                     text_response = await response.text()
-                    raise Exception(f"API Error: {response.status}, {text_response}")
+                    
+                    print("An error ocurred -> ,", text_response)
 
 
     async def get_funding_rate_interval(self, symbol: str) -> int:
@@ -407,8 +391,12 @@ class CryptoDataService:
         return None
     
     async def get_general_exchange_metadata(self, symbol):
-        funding_rate = await self.get_general_exchange_metadata(symbol=symbol)
+        funding_rate = await self.get_funding_rate_interval(symbol=symbol)
         
+        return {
+            "funding_rate_interval": funding_rate
+        }
+
 
     async def get_token_decimals(self, metadata):
         """Get the decimals of a token given its metadata"""
@@ -450,7 +438,7 @@ async def main_testing():
 
     crypto_data = CryptoDataService()
 
-    res = await crypto_data.get_all_symbols('binance'); print(res)
+    res = await crypto_data.get_symbol_metadata('XRPUSDT'); print(res)
 
 
 if __name__ == "__main__":

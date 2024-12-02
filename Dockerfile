@@ -13,7 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt /requirements.txt
 RUN pip install --no-cache-dir -r /requirements.txt
 
-COPY . .
+# Copy the application code
+COPY . /
 
 # Expose the application's port
 EXPOSE 8080

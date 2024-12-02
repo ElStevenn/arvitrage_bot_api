@@ -1,25 +1,9 @@
-variable "mongo_root_username" {
-  description = "username for mongodb"
-  type      = string
-  sensitive = true
-  default   = "root"
-}
-
-variable "mongo_root_password" {
-  description = "password for mongodb"
+variable "vpc_id" {
+  description = "The ID of the VPC where resources will be deployed."
   type        = string
-  sensitive   = true
 }
 
 variable "subnet_id" {
-  description = "subnet id"
+  description = "The ID of the subnet where the EC2 instance will be deployed."
   type        = string
-  sensitive   = false
-}
-
-variable "vpc_id" {
-  description = "Virtural Private Cloud ID"
-  type        = string
-  sensitive   = false
-  default     = "vpc-00a6f6c0e0afb0484"
 }

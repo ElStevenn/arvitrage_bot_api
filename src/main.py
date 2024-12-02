@@ -14,11 +14,11 @@ from src.app.crypto_data_service import CryptoDataService
 from src.app.redis_layer import RedisService
 from src.app.schedule_layer import ScheduleLayer
 from src.app.chart_analysis import FundingRateChart
-from src.app.mongo.database import ConnectionMongo
+from src.app.mongo.controller import MongoDB_Crypto
 from src.app.historcal_funding_rate import MainServiceLayer
 from src.app.schemas import *
 
-from src.scripts.setup_essentials import retrive_list_symbol, set_metadata_symbols
+# from src.scripts.setup_essentials import retrieve_list_symbol, set_metadata_symbols
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 async_scheduler = ScheduleLayer("Europe/Amsterdam")
 redis_memory = RedisService()
 main_services = MainServiceLayer()
-mongod_service = ConnectionMongo()
+mongod_service = MongoDB_Crypto()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -164,8 +164,8 @@ async def search_crypto(
 ):
     
     # Fetch the queried data from Redis and set response
-    queried_data = redis_memory.get_list_query(query=query, limit=limit, offset=offset)
-    response = [{"id": cp['id'], "symbol": cp['symbol'], "name": cp['name'], "image": cp['picture_url']} for cp in queried_data]
+    queried_data = await mongod_service.search_metadata(query=query, limit=limit, offset=offset)
+    response = [{"id": str(cp['id']), "symbol": cp['symbol'], "name": cp['name'], "image": cp['logo']} for cp in queried_data]
 
     return response
  
@@ -182,8 +182,8 @@ async def websocket_search_crypto(websocket: WebSocket):
             limit = data.get('limit')
 
             # Get data from Redis (implement limit if needed)
-            queried_data = redis_memory.get_list_query(query=query, limit=limit, offset=offset)
-            response = [{"id": cp['id'], "symbol": cp['symbol'], "name": cp['name'], "image": cp['picture_url']} for cp in queried_data]
+            queried_data = await mongod_service.search_metadata(query=query, limit=limit, offset=offset)
+            response = [{"id": cp['_id'], "symbol": cp['symbol'], "name": cp['name'], "image": cp['logo']} for cp in queried_data]
 
             # Send the queried data back to the WebSocket client
             await websocket.send_json(response)

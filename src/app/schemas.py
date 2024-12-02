@@ -14,7 +14,7 @@ class Crypto(BaseModel):
     next_execution_time: datetime
 
 class CryptoSearch(BaseModel):
-    id: int
+    id: str
     symbol: str
     name: Optional[str]
     image: Optional[str]

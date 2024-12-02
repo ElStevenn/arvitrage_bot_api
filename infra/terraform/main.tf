@@ -1,9 +1,15 @@
 provider "aws" {
-    region = "eu-south-2"
+  region = "eu-south-2"
 }
 
-resource "aws_security_group" "funding-rate-545009827213" {
-  name        = "funding-rate-545009827213"
+resource "aws_key_pair" "instance_key" {
+  key_name  = "developer_key"
+  public_key = file("../../src/security/instance_key2.pem.pub")
+}
+
+# Security Group
+resource "aws_security_group" "funding_rate" {
+  name        = "funding_rate_sg"
   description = "Security group mainly used in MongoDB - HTTP applications"
   vpc_id      = var.vpc_id
 
@@ -11,102 +17,152 @@ resource "aws_security_group" "funding-rate-545009827213" {
     Name = "allow_mongo"
   }
 
-  # Ingress = inbound rules | egress = outbound rules 
-
+  # Ingress Rules (Inbound)
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [ "0.0.0.0/0" ]
+    cidr_blocks = ["0.0.0.0/0"] 
   }
 
   ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = [ "0.0.0.0/0" ]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
-    cidr_blocks = [ "0.0.0.0/0" ]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Restrict MongoDB Port Access
   ingress {
     from_port   = 27017
     to_port     = 27017
     protocol    = "tcp"
-    cidr_blocks = [ "0.0.0.0/0" ]
+    cidr_blocks = ["0.0.0.0/0"]  
   }
 
+  # Egress Rules (Outbound)
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = [ "0.0.0.0/0" ]
+    cidr_blocks = ["0.0.0.0/0"]
   }
-
 }
 
-resource "aws_instance" "historical_funding_rate" {
-  ami                    = "ami-0bb457e0c5095fa9d"
-  instance_type          = "t3.medium"
-  key_name               = "instance_key"
-  subnet_id              = var.subnet_id
-  vpc_security_group_ids = [aws_security_group.funding-rate-545009827213.id]
+# IAM Role definition for ssm full acces
+resource "aws_iam_role" "ssm_role" {
+  name = "ssm_full_access_role"
 
-  root_block_device {
-    volume_size = 30
-    volume_type = "gp3"
-    delete_on_termination = true
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        },
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ssm_full_access" {
+  role       = aws_iam_role.ssm_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMFullAccess"
+}
+
+resource "aws_iam_instance_profile" "cli_permissions" {
+  name = "cli_permissions"
+  role = aws_iam_role.ssm_role.name
+}
+
+
+# Data Source for AMI
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"]  # Canonical
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
   }
 
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+# EC2 Instance
+resource "aws_instance" "historical_funding_rate" {
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = "t3.medium"
+  key_name               = aws_key_pair.instance_key.key_name
+  subnet_id              = var.subnet_id
+  vpc_security_group_ids = ["sg-0ceebb5821128f97d"]
+
+  iam_instance_profile   = aws_iam_instance_profile.cli_permissions.name
+
+  root_block_device {
+    volume_size           = 30
+    volume_type           = "gp3"
+    delete_on_termination = true
+  }
 
   tags = {
     Name = "CryptoProject"
   }
 
-  connection {
-    type = "ssh"
-    user = "ubuntu"
-    private_key = file("/home/mrpau/Desktop/Secret_Project/other_layers/historical_funding_rate_api/src/security/instance_key.pem")
-    host = self.public_ip
-  }
+  # User Data Script
+  user_data = file("${path.module}/../../scripts/user_data.sh")
 
   provisioner "remote-exec" {
+    inline = [
+      "mkdir -p /home/ubuntu/api_funding_rate"
+    ]
+
+    connection {
+      type        = "ssh"
+      user        = "ubuntu"
+      private_key = file("../../src/security/instance_key2.pem")
+      host        = self.public_ip
+    }
+  }
+
+  provisioner "file" {
+    source      = "/home/mrpau/Desktop/Secret_Project/other_layers/historical_funding_rate_api"
+    destination = "/home/ubuntu/api_funding_rate"
+
+    connection {
+      type        = "ssh"
+      user        = "ubuntu"
+      private_key = file("../../src/security/instance_key2.pem")
+      host        = self.public_ip
+    }
+  }
 
 
-    inline = [ 
-      "sudo apt update -y",
-      "sudo timedatectl set-timezone Europe/Madrid",
-
-      # Install Docker & Dependences
-      "sudo apt-get install ca-certificates curl",
-      "sudo install -m 0755 -d /etc/apt/keyrings",
-      "sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc",
-      "echo \"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo \\\"$VERSION_CODENAME\\\") stable\" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null",
-
-      "sudo apt-get update",
-
-      "sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin",
-
-      # Install Jenkins
-      "sudo apt install -y openjdk-11-jdk wget",
-      "wget -q -O - https://pkg.jenkins.io/debian-stable/jenkins.io.key | sudo apt-key add -",
-      "sudo sh -c 'echo deb http://pkg.jenkins.io/debian-stable binary/ > /etc/apt/sources.list.d/jenkins.list'",
-      "sudo apt update -y",
-      "sudo apt install -y jenkins",
-      "sudo systemctl start jenkins",
-      "sudo systemctl enable jenkins",
-
-      # Run setup server
+  provisioner "remote-exec" {
+    inline = [
+      "sudo su",
       "chmod +x scripts/*",
-      "./scripts/setup_server.sh",
-      
+      "./scripts/user_data.sh",
+    ]
 
+    connection {
+      type        = "ssh"
+      user        = "ubuntu"
+      private_key = file("../../src/security/instance_key2.pem")
+      host        = self.public_ip
+    }
 
-     ]
   }
 }
