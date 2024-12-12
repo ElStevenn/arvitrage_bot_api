@@ -16,21 +16,20 @@ from src.app.mongo.schema import *
 from src.app.chart_analysis import FundingRateChart
 
 
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class MainServiceLayer:
+class FundingRateArbitrageBot:
     def __init__(self) -> None:
         self.data_service = CryptoDataService()
         self.mongo_service = MongoDB_Crypto()
         self.timezone = "Europe/Amsterdam"
 
     # FUNCTION EVERY DAY
-    async def crypto_rebase(self):
-        # ... (Your existing code for crypto_rebase)
+    async def analysisFunctionTrigger(self):
+        """This function executes every day and makes an analysis of the crypto if the funding rate was hight"""
         pass
 
     # FUNCTION EVERY 8 or 4 HOURS - DEPENDING | every XX and 1 minute!
@@ -204,19 +203,45 @@ class MainServiceLayer:
         await self.data_service.save_current_funding_rate(symbol=symbol, analysis=current_analysis)
         logger.info(f"Initialized analysis for {symbol}")
 
-    # Other methods remain unchanged...
+    def get_next_funding_fee_hour(self, delay: Literal[8, 4], ans=False):
+        """Get next funding fee hour based on the delay interval."""
+        now = datetime.now(pytz.utc)
+        timezone = pytz.timezone('Europe/Berlin')
 
-    def get_next_funding_rate(self, delay: Literal[8, 4], ans=False):
-        # ... (Your existing code for get_next_funding_rate)
-        pass
+        local_now = now.astimezone(timezone)
+        is_summer = local_now.dst() != timedelta(0)
+
+        funding_hour = 18 if is_summer else 17
+        funding_time_today = local_now.replace(hour=funding_hour, minute=0, second=0, microsecond=0)
+
+        if local_now >= funding_time_today:
+            funding_time_today += timedelta(days=1)
+        next_funding_time = funding_time_today + timedelta(hours=delay)
+
+        if ans:
+            return next_funding_time
+        return funding_time_today
+
 
     def get_last_period_funding_rate(self, delay: Literal[8, 4], ans=False):
-        # ... (Your existing code for get_last_period_funding_rate)
-        pass
+        """Retrives the last period of funding ratr"""
+        now = datetime.now(pytz.utc)
+        timezone = pytz.timezone('Europe/Berlin')
 
-    async def get_crypto_logo(self, symbol: str) -> Tuple[str, str, str]:
-        # ... (Your existing code for get_crypto_logo)
-        pass
+        local_now = now.astimezone(timezone)
+        is_summer = local_now.dst() != timedelta(0)
+
+        funding_hour = 18 if is_summer else 17
+        funding_time_today = local_now.replace(hour=funding_hour, minute=0, second=0, microsecond=0)
+
+        if local_now < funding_time_today:
+            funding_time_today -= timedelta(days=1)
+        last_funding_time = funding_time_today - timedelta(hours=delay)
+
+        if ans:
+            return last_funding_time - timedelta(hours=delay)
+        return last_funding_time
+
 
 
 async def main_testing():

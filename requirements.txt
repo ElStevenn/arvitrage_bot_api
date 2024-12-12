@@ -17,3 +17,4 @@ cryptography
 paramiko
 pymongo
 web3
+pyjwt

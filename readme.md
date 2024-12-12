@@ -1,3 +1,5 @@
+## Arbitrage BOT
+
 ### Set credentials (if using localhost and wants to deploy app to AWS)
  - Store sensitve and non-sensitive variables to aws
  ```bash

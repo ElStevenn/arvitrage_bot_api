@@ -39,6 +39,7 @@ def load_private_key(path):
 # Specify the paths to the keys
 PUBLIC_KEY = load_public_key('src/security/secure_key.pub')
 PRIVATE_KEY = load_private_key('src/security/secure_key')
+JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'jwt-secret-key')
 
 # UTILS
-AVARIABLE_EXCHANGES = ['bitget', 'binance']
+AVARIABLE_EXCHANGES = ['bitget', 'binance',]

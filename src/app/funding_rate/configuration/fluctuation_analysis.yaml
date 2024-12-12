@@ -1,0 +1,49 @@
+version: v1
+period: 2023-12-12T00:00:00Z # Funding rate period
+funding_rate:
+- exchange: bitget
+  funding_rate: 0.0125
+- exchange: binance
+  funding_rate: 0.0142
+price_data:
+  symbol: BTCUSDT
+  ohlc:
+  - timestamp: 2023-12-12T00:01:00Z # 1 minute after the funding rate event
+    open: 43100.0
+    high: 43300.0
+    low: 43050.0
+    close: 43200.0
+    volume: 1500.30
+  - timestamp: 2023-12-12T00:05:00Z # 5 minutes after the funding rate event
+    open: 43200.0
+    high: 43400.0
+    low: 43150.0
+    close: 43300.0
+    volume: 2000.50
+  - timestamp: 2023-12-11T23:59:00Z # 1 minute before the funding rate event
+    open: 42950.0
+    high: 43000.0
+    low: 42800.0
+    close: 42950.0
+    volume: 1100.75
+price_change_percentage_1min: 0.5 # % change after 1 minute
+price_change_percentage_5min: 1.2 # % change after 5 minutes
+volatility_index: 2.1 # Standard deviation of price movements in the event window
+market_context:
+  moving_averages:
+    short_term_ma: 43100 # e.g., 20-period moving 
+    medium_term_ma: 43300 # e.g., 50-period moving average
+    long_term_ma: 42800 # e.g., 200-period moving average
+  momentum_indicators:
+    rsi_14: 68 # 14-period Relative Strength Index
+    macd: 0.25 # MACD value at the event
+  liquidity_snapshot:
+    order_book_depth:
+      bids: 5100 # Total bid volume
+      asks: 4800 # Total ask volume
+    spread: 5.0 # Bid-ask spread in USD
+  correlated_assets:
+    ETHUSDT:
+      funding_rate: 0.013
+      price_change_percentage_1min: 0.8
+      price_change_percentage_5min: 1.5

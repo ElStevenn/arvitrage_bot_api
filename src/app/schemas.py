@@ -11,7 +11,7 @@ class Crypto(BaseModel):
     name: Optional[str]
     image: Optional[str]
     funding_rate_delay: Literal['8h', '4h']
-    next_execution_time: datetime
+    next_execution_time: datetime | None
 
 class CryptoSearch(BaseModel):
     id: str

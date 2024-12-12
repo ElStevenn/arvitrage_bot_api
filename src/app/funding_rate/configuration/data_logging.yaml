@@ -1,0 +1,23 @@
+version: v1
+period: datetime
+funding_rate:
+- exchange: string
+  funding_rate: float
+- exchange: string
+  funding_rate: float
+price_data:
+  symbol: SYMBOLUSDT
+  fr_period_price: float
+  ohlc:
+  - timestamp: (minute after fr)
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+  - timestamp: (minute before fr)
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float

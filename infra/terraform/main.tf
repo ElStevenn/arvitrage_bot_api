@@ -121,9 +121,6 @@ resource "aws_instance" "historical_funding_rate" {
     Name = "CryptoProject"
   }
 
-  # User Data Script
-  user_data = file("${path.module}/../../scripts/user_data.sh")
-
   provisioner "remote-exec" {
     inline = [
       "mkdir -p /home/ubuntu/api_funding_rate"
@@ -137,9 +134,13 @@ resource "aws_instance" "historical_funding_rate" {
     }
   }
 
+  provisioner "local-exec" {
+    command = "tar -czf /tmp/historical_funding_rate_api.tar.gz -C /home/mrpau/Desktop/Secret_Project historical_funding_rate_api"
+  }
+
   provisioner "file" {
-    source      = "/home/mrpau/Desktop/Secret_Project/other_layers/historical_funding_rate_api"
-    destination = "/home/ubuntu/api_funding_rate"
+    source      = "/tmp/historical_funding_rate_api.tar.gz"
+    destination = "/home/ubuntu/historical_funding_rate_api.tar.gz"
 
     connection {
       type        = "ssh"
@@ -149,12 +150,13 @@ resource "aws_instance" "historical_funding_rate" {
     }
   }
 
-
   provisioner "remote-exec" {
     inline = [
       "sudo su",
-      "chmod +x scripts/*",
-      "./scripts/user_data.sh",
+      "tar -xzf /home/ubuntu/historical_funding_rate_api.tar.gz -C /home/ubuntu/",
+      "rm /home/ubuntu/historical_funding_rate_api.tar.gz", # Cleanup archive
+      "chmod +x /home/ubuntu/historical_funding_rate_api/scripts/*",
+      "/home/ubuntu/historical_funding_rate_api/scripts/user_data.sh",
     ]
 
     connection {
@@ -163,6 +165,6 @@ resource "aws_instance" "historical_funding_rate" {
       private_key = file("../../src/security/instance_key2.pem")
       host        = self.public_ip
     }
-
   }
+
 }

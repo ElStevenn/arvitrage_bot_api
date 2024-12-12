@@ -2,7 +2,7 @@
 # Author: Pau Mateu
 # Developer email: paumat17@gmail.com
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, Query, WebSocketDisconnect, Path
+from fastapi import FastAPI, HTTPException, Request, WebSocket, Query, WebSocketDisconnect, Path, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
 from contextlib import asynccontextmanager
@@ -12,11 +12,13 @@ import asyncio, logging, pytz
 
 from src.app.crypto_data_service import CryptoDataService
 from src.app.redis_layer import RedisService
-from src.app.schedule_layer import ScheduleLayer
 from src.app.chart_analysis import FundingRateChart
 from src.app.mongo.controller import MongoDB_Crypto
-from src.app.historcal_funding_rate import MainServiceLayer
+from app.funding_rate.funding_rate_analysis import FundingRateArbitrageBot
+from src.app.security import get_current_user_id
 from src.app.schemas import *
+
+from app.task_sheduler import ScheduleLayer
 
 # from src.scripts.setup_essentials import retrieve_list_symbol, set_metadata_symbols
 
@@ -27,7 +29,7 @@ logger = logging.getLogger(__name__)
 # Initialize services
 async_scheduler = ScheduleLayer("Europe/Amsterdam")
 redis_memory = RedisService()
-main_services = MainServiceLayer()
+main_services = FundingRateArbitrageBot()
 mongod_service = MongoDB_Crypto()
 
 @asynccontextmanager
@@ -137,7 +139,7 @@ async def get_detail_event(symbol: str):
             "image": crypto_metadata["picture_url"], 
             "description": crypto_metadata["description"], 
             "funding_rate_delay": '4h' if crypto_metadata["funding_rate_del"] == 4 else '8h', 
-            "next_execution_time": next_execution_time.isoformat()
+            "next_execution_time": None # next_execution_time.isoformat()
             }
     
     except TypeError:
@@ -181,9 +183,15 @@ async def websocket_search_crypto(websocket: WebSocket):
             offset = data.get('offset')
             limit = data.get('limit')
 
+            if not isinstance(limit, int) or limit <= 0:
+                limit = 20
+
+            if not isinstance(offset, int) or offset < 0:
+                offset = 0 
+
             # Get data from Redis (implement limit if needed)
             queried_data = await mongod_service.search_metadata(query=query, limit=limit, offset=offset)
-            response = [{"id": cp['_id'], "symbol": cp['symbol'], "name": cp['name'], "image": cp['logo']} for cp in queried_data]
+            response = [{"id": cp['id'], "symbol": cp['symbol'], "name": cp['name'], "image": cp['logo']} for cp in queried_data]
 
             # Send the queried data back to the WebSocket client
             await websocket.send_json(response)
