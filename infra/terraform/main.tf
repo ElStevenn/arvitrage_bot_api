@@ -72,7 +72,7 @@ resource "aws_instance" "historical_funding_rate" {
   }
 
   provisioner "file" {
-    source      = "/home/mrpau/Desktop/Secret_Project/other_layers/Arvitrage_bot_API/src/scripts"
+    source      = "/home/mrpau/Desktop/Secret_Project/other_layers/Arvitrage_bot_API/scripts"
     destination = "/home/ubuntu/scripts"
 
     connection {

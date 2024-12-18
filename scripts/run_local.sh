@@ -34,6 +34,17 @@ if [ "$response" == "y" ]; then
     if [ "$term_qstn" == "y" ]; then
         docker logs --follow "$container_name"
     fi
+
+    # Start
+    # terraform apply --var-file="sensitive.tfvars"
+
+    # Destroy
+    # terraform destroy -target aws_instance.historical_funding_rate --var-file="sensitive.tfvars"
+
+    # Restart
+    # terraform apply -target aws_instance.historical_funding_rate --var-file="sensitive.tfvars" 
+
+
 else
     echo "Operation aborted."
 fi
