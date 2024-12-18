@@ -14,11 +14,11 @@ from src.app.crypto_data_service import CryptoDataService
 from src.app.redis_layer import RedisService
 from src.app.chart_analysis import FundingRateChart
 from src.app.mongo.controller import MongoDB_Crypto
-from app.funding_rate.funding_rate_analysis import FundingRateArbitrageBot
+from src.app.funding_rate.funding_rate_analysis import FundingRateArbitrageBot
 from src.app.security import get_current_user_id
 from src.app.schemas import *
 
-from app.task_sheduler import ScheduleLayer
+from src.app.sheduler_layer import ScheduleLayer
 
 # from src.scripts.setup_essentials import retrieve_list_symbol, set_metadata_symbols
 
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # Initialize services
 async_scheduler = ScheduleLayer("Europe/Amsterdam")
 redis_memory = RedisService()
-main_services = FundingRateArbitrageBot()
+funding_rate = FundingRateArbitrageBot()
 mongod_service = MongoDB_Crypto()
 
 @asynccontextmanager
@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
     logger.info("Scheduler started.")
 
     # Schedule the daily crypto_rebase job at 9:00 AM Spanish time
-    async_scheduler.schedule_daily_job(9, 0, main_services.crypto_rebase)
+    # async_scheduler.schedule_daily_job(9, 0, main_services.crypto_rebase)
 
     """
     # Calculate the next 2 AM in Europe/Amsterdam timezone and set the params (exec_time)
@@ -64,8 +64,8 @@ async def lifespan(app: FastAPI):
         logger.info("Scheduler shut down.")
 
 app = FastAPI(
-    title="MarketInsightsAPI ",
-    description="MarketInsightsAPI is a part of TradeVisionary application, and it's an API cryptocurrency analytics platform that provides funding rate analysis, chart insights, real-time metadata, and search capabilities, along with robust WebSocket and administrative functionalities.",
+    title="Arvitrage Bot API",
+    description="Arvitrage Bot API is a part of Fundy application, and it's an API cryptocurrency analytics platform that provides funding rate analysis, chart insights, real-time metadata, and search capabilities, along with robust WebSocket and administrative functionalities.",
     lifespan=lifespan
 )
 
@@ -73,7 +73,6 @@ origins = [
     "http://0.0.0.0:80",
     "http://localhost:8080",
     "http://3.143.209.3/",
-    "http://185.254.206.129/"
 ]
 
 app.add_middleware(
@@ -83,6 +82,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 @app.get("/funding-rate/history/{symbol}", 
@@ -112,7 +112,7 @@ async def get_historical_funding_rate(
     else:
         return []
 
-@app.get("/crypto-analysis/today/{symbol}", description="### Get today analysis from a given crypto\n\n", tags=["Crypto Analysis"])
+@app.get("/crypto-analysis/today/{symbol}", description="### Get today analysis from a given crypto\n\n ### At this this function doesn't meet with the data schema", tags=["Crypto Analysis"])
 async def get_today_analysis(symbol: str):
     chart_analysis = FundingRateChart(symbol)
     period = int(datetime.now(timezone.utc).timestamp() * 1000)
@@ -126,20 +126,21 @@ async def get_today_analysis(symbol: str):
 @app.get("/crypto/detail/{symbol}", description="Get name and logo of the crypto", tags=["Crypto"],  response_model=Crypto)
 async def get_detail_event(symbol: str):
     try:
-        crypto_metadata = redis_memory.get_crypto_metadata(symbol)
+        crypto_metadata = await mongod_service.get_crypto_metadata(symbol)
 
         if symbol.lower().endswith('usdt'):
             symbol = symbol[:-4]
 
-        next_execution_time = main_services.get_next_funding_rate(crypto_metadata["funding_rate_del"])
+        # next_execution_time = funding_rate.get_next_funding_fee_hour(crypto_metadata["funding_rate_del"])
 
         return {
-            "symbol": symbol, 
-            "name": crypto_metadata["name"], 
-            "image": crypto_metadata["picture_url"], 
-            "description": crypto_metadata["description"], 
-            "funding_rate_delay": '4h' if crypto_metadata["funding_rate_del"] == 4 else '8h', 
-            "next_execution_time": None # next_execution_time.isoformat()
+                "symbol": symbol, 
+                "name": crypto_metadata["name"], 
+                "image": crypto_metadata["logo"], 
+                "description": crypto_metadata["description"], 
+                "funding_rate_delay": "8h", # '4h' if crypto_metadata["funding_rate_del"] == 4 else '8h', 
+                "next_execution_time": datetime.now() + timedelta(hours=3), 
+                "available_in": crypto_metadata["available_in"]
             }
     
     except TypeError:
@@ -210,10 +211,10 @@ async def delete_all_cryptos_analysis():
         
     return response
 
-@app.get("/setup")
+@app.patch("/setup-metadata", description="### Administrative function\n\n - This function is used to retrieve all the metadata from the cryptos. \n\n - This process may take a while!", tags=["Administrative"])
 async def setup_enviroment():
-    res = await retrive_list_symbol()
-    return res
+
+    pass
 
 if __name__ == "__main__":
     import uvicorn

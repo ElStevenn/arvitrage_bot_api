@@ -2,7 +2,10 @@ pipeline {
     agent any
 
     stages {
-        stage('build'){
+        stage('commit'){
+
+        }
+        stage('') {
 
         }
         stage('test') {

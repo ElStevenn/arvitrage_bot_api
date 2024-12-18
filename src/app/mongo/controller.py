@@ -148,7 +148,13 @@ class MongoDB_Crypto(ConnectionMongo):
         """
         Retrieves metadata for a given cryptocurrency symbol.
         """
-        pass
+        document = await self.crypto_collection.find_one({"symbol": symbol})
+        if document:
+            document['id'] = str(document['_id'])
+            del document['_id']
+            return document
+        return None
+
 
     async def update_crypto_metadata(self, symbol: str, updates: Dict):
         """
@@ -292,7 +298,7 @@ async def mongodb_testing():
         }
 
     # symbols = await mongo_service.get_avariable_symbol(); print(symbols)
-    avariable = await mongo_service.search_metadata("1in"); print(avariable)
+    avariable = await mongo_service.get_crypto_metadata("DOT"); print(avariable)
 
 
 if __name__ == "__main__":

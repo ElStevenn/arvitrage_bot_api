@@ -13,7 +13,7 @@ from fastapi.encoders import jsonable_encoder
 # from web3 import AsyncWeb3, Web3
 # from web3 import AsyncHTTPProvider
 
-from src.config import AVARIABLE_EXCHANGES, COINMARKETCAP_APIKEY, INFURA_APIKEY
+from src.config import AVARIABLE_EXCHANGES, COINMARKETCAP_APIKEY, WEB3_APIKEY
 from fastapi import HTTPException
 
 class Granularity:
@@ -30,11 +30,12 @@ class CryptoDataService:
         self.bitget_url = "https://api.bitget.com"
         self.binance_url = "https://fapi.binance.com"
         
+
         # External APIs URL
         self.coinmarketcap_url = "https://pro-api.coinmarketcap.com"
         
         # Web3
-        # self.infura_url = f"https://mainnet.infura.io/v3/{INFURA_APIKEY}"
+        # self.infura_url = f"https://mainnet.infura.io/v3/{WEB3_APIKEY}"
         # self.web3 = Web3(Web3.HTTPProvider(self.infura_url))
 
         # if self.web3.is_connected():
@@ -108,7 +109,7 @@ class CryptoDataService:
                     text_response = await response.text()
                     raise TypeError(f"An error ocurref with the the API response: {text_response}")
                 
-    async def get_candlestick_chart_v2(self, symbol):pass
+    async def get_candlestick_chart_v2(self, symbol):   pass
 
     async def get_funding_rate_period(self, symbol):
         """Get funding rate period, either 8h or 4h"""

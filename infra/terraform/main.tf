@@ -3,92 +3,30 @@ provider "aws" {
 }
 
 resource "aws_key_pair" "instance_key" {
-  key_name  = "developer_key"
+  key_name   = "developer_key"
   public_key = file("../../src/security/instance_key2.pem.pub")
 }
 
-# Security Group
-resource "aws_security_group" "funding_rate" {
-  name        = "funding_rate_sg"
-  description = "Security group mainly used in MongoDB - HTTP applications"
-  vpc_id      = var.vpc_id
-
+resource "aws_eip" "main_api_eip" {
+  domain = "vpc"
   tags = {
-    Name = "allow_mongo"
-  }
-
-  # Ingress Rules (Inbound)
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] 
-  }
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Restrict MongoDB Port Access
-  ingress {
-    from_port   = 27017
-    to_port     = 27017
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  
-  }
-
-  # Egress Rules (Outbound)
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    Name = "Arvitrage API"
   }
 }
 
-# IAM Role definition for ssm full acces
-resource "aws_iam_role" "ssm_role" {
-  name = "ssm_full_access_role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Principal = {
-          Service = "ec2.amazonaws.com"
-        },
-        Action = "sts:AssumeRole"
-      }
-    ]
-  })
+resource "aws_eip_association" "main_api_eip_assoc" {
+  instance_id   = aws_instance.historical_funding_rate.id
+  allocation_id = aws_eip.main_api_eip.id
 }
 
-resource "aws_iam_role_policy_attachment" "ssm_full_access" {
-  role       = aws_iam_role.ssm_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMFullAccess"
+data "aws_security_group" "paus-security-group" {
+  name = "paus-security-group"
+  id   = "sg-0ceebb5821128f97d"
 }
 
-resource "aws_iam_instance_profile" "cli_permissions" {
-  name = "cli_permissions"
-  role = aws_iam_role.ssm_role.name
-}
-
-
-# Data Source for AMI
 data "aws_ami" "ubuntu" {
   most_recent = true
-  owners      = ["099720109477"]  # Canonical
+  owners      = ["099720109477"]
 
   filter {
     name   = "name"
@@ -101,15 +39,17 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-# EC2 Instance
 resource "aws_instance" "historical_funding_rate" {
-  ami                    = data.aws_ami.ubuntu.id
+  ami                    = var.ami_id
   instance_type          = "t3.medium"
   key_name               = aws_key_pair.instance_key.key_name
   subnet_id              = var.subnet_id
-  vpc_security_group_ids = ["sg-0ceebb5821128f97d"]
+  vpc_security_group_ids = [data.aws_security_group.paus-security-group.id]
 
-  iam_instance_profile   = aws_iam_instance_profile.cli_permissions.name
+  tags = {
+    Name = "Arvitrage API"
+    Type = "Pau's architecture"
+  }
 
   root_block_device {
     volume_size           = 30
@@ -117,30 +57,23 @@ resource "aws_instance" "historical_funding_rate" {
     delete_on_termination = true
   }
 
-  tags = {
-    Name = "CryptoProject"
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "mkdir -p /home/ubuntu/api_funding_rate"
-    ]
-
-    connection {
-      type        = "ssh"
-      user        = "ubuntu"
-      private_key = file("../../src/security/instance_key2.pem")
-      host        = self.public_ip
-    }
+  lifecycle {
+    ignore_changes = [ami] # Prevent Terraform from recreating due to AMI drift
   }
 
   provisioner "local-exec" {
-    command = "tar -czf /tmp/historical_funding_rate_api.tar.gz -C /home/mrpau/Desktop/Secret_Project historical_funding_rate_api"
+    command = <<EOT
+      cd .. &&
+      cd .. &&
+      git add . &&
+      git commit -m "${var.commit_message}" &&
+      git push -u origin main
+    EOT
   }
 
   provisioner "file" {
-    source      = "/tmp/historical_funding_rate_api.tar.gz"
-    destination = "/home/ubuntu/historical_funding_rate_api.tar.gz"
+    source      = "/home/mrpau/Desktop/Secret_Project/other_layers/Arvitrage_bot_API/src/scripts"
+    destination = "/home/ubuntu/scripts"
 
     connection {
       type        = "ssh"
@@ -152,11 +85,8 @@ resource "aws_instance" "historical_funding_rate" {
 
   provisioner "remote-exec" {
     inline = [
-      "sudo su",
-      "tar -xzf /home/ubuntu/historical_funding_rate_api.tar.gz -C /home/ubuntu/",
-      "rm /home/ubuntu/historical_funding_rate_api.tar.gz", # Cleanup archive
-      "chmod +x /home/ubuntu/historical_funding_rate_api/scripts/*",
-      "/home/ubuntu/historical_funding_rate_api/scripts/user_data.sh",
+      "chmod +x /home/ubuntu/scripts/CI/*",
+      "bash /home/ubuntu/scripts/source.sh"
     ]
 
     connection {
@@ -167,4 +97,38 @@ resource "aws_instance" "historical_funding_rate" {
     }
   }
 
+  provisioner "file" {
+    source      = "/home/mrpau/Desktop/Secret_Project/other_layers/Arvitrage_bot_API/src/.env"
+    destination = "/home/ubuntu/.env"
+
+    connection {
+      type        = "ssh"
+      user        = "ubuntu"
+      private_key = file("../../src/security/instance_key2.pem")
+      host        = self.public_ip
+    }
+  }
+}
+
+resource "null_resource" "post_eip_setup" {
+  depends_on = [aws_eip_association.main_api_eip_assoc]
+
+  provisioner "remote-exec" {
+    inline = [
+      "chmod +x /home/ubuntu/scripts/CI/build.sh",
+      "bash /home/ubuntu/scripts/CI/build.sh"
+    ]
+
+    connection {
+      type        = "ssh"
+      user        = "ubuntu"
+      private_key = file("../../src/security/instance_key2.pem")
+      host        = aws_eip.main_api_eip.public_ip
+    }
+  }
+}
+
+output "elastic_ip" {
+  value       = aws_eip.main_api_eip.public_ip
+  description = "The Elastic IP address associated with the EC2 instance."
 }

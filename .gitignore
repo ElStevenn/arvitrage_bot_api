@@ -5,8 +5,12 @@ src/.env
 *security
 *venv
 
+# Terraforn
 *sensitive.tfvars
 *.terraform.lock.hcl
 *.terraform
 *terraform.tfstate
 *terraform.tfstate.backup
+
+# Kubernetes
+infra/k8s/secrets.yaml

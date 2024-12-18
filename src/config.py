@@ -6,7 +6,6 @@ load_dotenv()
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-
 # MONGODB
 MONGODB_URL = os.getenv('MONGODB_URL', 'mongodb://localhost:27017')
 MONGO_USER = os.getenv('MONGO_USER', 'mongo_user')
@@ -16,7 +15,11 @@ MONGO_PASSWD = os.getenv('MONGO_PASSWD', 'mongo_password')
 COINMARKETCAP_APIKEY = os.getenv('COINMARKETCAP_APIKEY', 'coinmarketcap-apikey')
 
 # WEB3
-INFURA_APIKEY = os.getenv('INFURA_APIKEY', 'infura-apikey')
+WEB3_APIKEY = os.getenv('WEB3_APIKEY', 'infura-apikey')
+
+# THIRD APIS
+BRIGHTDATA_API_TOKEN = os.getenv('BRIGHTDATA_API_TOKEN', 'brightdata-api-token')
+
 
 # SECURITY
 def load_public_key(path):

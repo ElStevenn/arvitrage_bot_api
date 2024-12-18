@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arvitragebot-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: arvitragebot
+  template:
+    metadata:
+      labels:
+        app: arvitragebot
+    spec:
+      containers:
+      - name: python
+        image: python:3
+        ports:
+        - containerPort: 8080
+        env:
+        - name: COINMARKETCAP_APIKEY
+          valueFrom:
+            secretKeyRef:
+              name: python-app
+              key: COINMARKETCAP_APIKEY
+        - name: MONGO_USER
+          valueFrom:
+            secretKeyRef:
+              name: mongo-database
+              key: MONGO_USER
+        - name: MONGO_PASSWD
+          valueFrom:
+            secretKeyRef:
+              name: mongo-database
+              key: MONGO_PASSWD
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: python-app
+              key: JWT_SECRET_KEY
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: arvitragebot-service
+spec:
+  selector:
+    app: arvitragebot
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
