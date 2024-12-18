@@ -86,7 +86,7 @@ resource "aws_instance" "historical_funding_rate" {
   provisioner "remote-exec" {
     inline = [
       "chmod +x /home/ubuntu/scripts/CI/*",
-      "bash /home/ubuntu/scripts/source.sh"
+      "bash /home/ubuntu/scripts/CI/source.sh"
     ]
 
     connection {
