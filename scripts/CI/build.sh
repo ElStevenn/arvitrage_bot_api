@@ -17,7 +17,7 @@ CONTAINER_NAME="arvitrage_bot_api_v1"
 NETWORK_NAME="my_network"
 NGINX_CONF_DIR="/etc/nginx/sites-available"
 NGINX_ENABLED_DIR="/etc/nginx/sites-enabled"
-NGINX_CONF="$NGINX_CONF_DIR/fundy_api"
+NGINX_CONF="$NGINX_CONF_DIR/arvitrage_bot_api"
 
 # Ensure directories
 sudo mkdir -p "$NGINX_CONF_DIR" "$NGINX_ENABLED_DIR"
@@ -52,6 +52,11 @@ if sudo ufw status | grep -q "Status: active"; then
     sudo ufw allow 'Nginx Full' || true
 fi
 
+# Create Docker network if it doesn't exist
+if ! docker network ls --format '{{.Name}}' | grep -w "$NETWORK_NAME" > /dev/null; then
+    docker network create "$NETWORK_NAME"
+fi
+
 # Build Docker image
 cd "$APP_DIR" || exit 1
 docker build -t "$IMAGE_NAME" .
@@ -75,8 +80,8 @@ server {
 }
 EOL
 
-
-sudo ln -sf "$NGINX_CONF" "$NGINX_ENABLED_DIR/fundy_api"
+# Enable the Nginx configuration
+sudo ln -sf "$NGINX_CONF" "$NGINX_ENABLED_DIR/arvitrage_bot_api"
 sudo rm -f /etc/nginx/sites-enabled/default || true
 
 # Test Nginx configuration and restart
