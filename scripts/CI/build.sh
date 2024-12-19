@@ -1,7 +1,7 @@
 #!/bin/bash
 
 set -e
-set -x  # Enable debug mode
+set -x 
 
 # Variables
 DOMAIN="arbibot.paumateu.com"
@@ -10,8 +10,8 @@ APP_DIR="/home/ubuntu/arvitrage_bot_api"
 CONFIG="/home/ubuntu/scripts/config.json"
 
 SECURITY_PATH="$APP_DIR/src/security"
-PRIVATE_KEY="$SECURITY_PATH/private_key.pem"
-PUBLIC_KEY="$SECURITY_PATH/public_key.pem"
+PRIVATE_KEY="$SECURITY_PATH/secure_key"
+PUBLIC_KEY="$SECURITY_PATH/public_key.pub"
 IMAGE_NAME="arvitrage_bot_api"
 CONTAINER_NAME="arvitrage_bot_api_v1"
 NETWORK_NAME="my_network"
@@ -26,9 +26,8 @@ mkdir -p "$SECURITY_PATH"
 # Generate keys if needed
 if [ ! -f "$PRIVATE_KEY" ]; then
     echo "Generating private key..."
-    openssl genpkey -algorithm RSA -out "$PRIVATE_KEY" -pkeyopt rsa_keygen_bits:4096
-    echo "Generating public key..."
-    openssl rsa -pubout -in "$PRIVATE_KEY" -out "$PUBLIC_KEY"
+    ssh-keygen -t rsa -b 4096 -f "$PRIVATE_KEY" -q -N ""
+    echo "Private and public keys have been generated."
 fi
 
 # Ensure .env file
