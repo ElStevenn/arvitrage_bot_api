@@ -75,6 +75,7 @@ server {
 }
 EOL
 
+
 sudo ln -sf "$NGINX_CONF" "$NGINX_ENABLED_DIR/fundy_api"
 sudo rm -f /etc/nginx/sites-enabled/default || true
 
@@ -82,42 +83,42 @@ sudo rm -f /etc/nginx/sites-enabled/default || true
 sudo nginx -t
 sudo systemctl restart nginx
 
-# Obtain SSL certificate using HTTP-01 challenge
-if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
-    sudo certbot --nginx -d "$DOMAIN" -d "www.$DOMAIN" --non-interactive --agree-tos -m "$EMAIL"
-fi
+# # Obtain SSL certificate using HTTP-01 challenge
+# if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+#     sudo certbot --nginx -d "$DOMAIN" -d "www.$DOMAIN" --non-interactive --agree-tos -m "$EMAIL"
+# fi
 
-# Reconfigure Nginx to only listen on HTTPS (443)
-sudo bash -c "cat > $NGINX_CONF" <<EOL
-server {
-    listen 443 ssl;
-    server_name $DOMAIN www.$DOMAIN;
+# # Reconfigure Nginx to only listen on HTTPS (443)
+# sudo bash -c "cat > $NGINX_CONF" <<EOL
+# server {
+#     listen 443 ssl;
+#     server_name $DOMAIN www.$DOMAIN;
 
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+#     ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+#     ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+#     include /etc/letsencrypt/options-ssl-nginx.conf;
+#     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-EOL
+#     location / {
+#         proxy_pass http://127.0.0.1:8000;
+#         proxy_set_header Host \$host;
+#         proxy_set_header X-Real-IP \$remote_addr;
+#         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+#         proxy_set_header X-Forwarded-Proto \$scheme;
+#     }
+# }
+# EOL
 
-# Remove any references to port 80, just serve on port 443 now
-sudo nginx -t
-sudo systemctl reload nginx
+# # Remove any references to port 80, just serve on port 443 now
+# sudo nginx -t
+# sudo systemctl reload nginx
 
-# Update the API flag in config
-if [ -f "$CONFIG" ] && [ -s "$CONFIG" ]; then
-    API=$(jq -r '.api' "$CONFIG")
-    if [ "$API" == "false" ]; then
-        jq '.api = true' "$CONFIG" > temp.json && mv temp.json "$CONFIG"
-    fi
-fi
+# # Update the API flag in config
+# if [ -f "$CONFIG" ] && [ -s "$CONFIG" ]; then
+#     API=$(jq -r '.api' "$CONFIG")
+#     if [ "$API" == "false" ]; then
+#         jq '.api = true' "$CONFIG" > temp.json && mv temp.json "$CONFIG"
+#     fi
+# fi
 
-echo "Setup complete. Your application should now be accessible exclusively via https://$DOMAIN/ (port 443 only)."
+# echo "Setup complete. Your application should now be accessible exclusively via https://$DOMAIN/ (port 443 only)."

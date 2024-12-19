@@ -4,9 +4,9 @@ set -x  # Enable debug mode for detailed logging
 
 # Variables
 DOMAIN="arbibot.paumateu.com"
-APP_DIR="/home/ubuntu/arvibrage_bot_api"
-IMAGE_NAME="arvibrage_bot_api"
-CONTAINER_NAME="arvibrage_bot_api_v1"
+APP_DIR="/home/ubuntu/arvitrage_bot_api"    
+IMAGE_NAME="arvitrage_bot_api"             
+CONTAINER_NAME="arvitrage_bot_api_v1"     
 NETWORK_NAME="my_network"
 
 # Stop and remove existing Docker container if it exists
