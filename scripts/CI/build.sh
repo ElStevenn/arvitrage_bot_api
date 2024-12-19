@@ -4,7 +4,7 @@ set -e
 set -x  # Enable debug mode
 
 # Variables
-DOMAIN="arvitrage.pauservices.top"
+DOMAIN="arbibot.paumateu.com"
 EMAIL="paumat17@gmail.com"
 APP_DIR="/home/ubuntu/arvitrage_bot_api"
 CONFIG="/home/ubuntu/scripts/config.json"
@@ -57,7 +57,7 @@ cd "$APP_DIR" || exit 1
 docker build -t "$IMAGE_NAME" .
 
 # Run the container mapped to localhost:8000
-docker run -d --name "$CONTAINER_NAME" --network "$NETWORK_NAME" -p 127.0.0.1:8000:8000 "$IMAGE_NAME"
+docker run -d --name "$CONTAINER_NAME" --network "$NETWORK_NAME" -p 127.0.0.1:8000:8080 "$IMAGE_NAME"
 
 # Create a temporary HTTP server block for initial certificate issuance
 sudo bash -c "cat > $NGINX_CONF" <<EOL
