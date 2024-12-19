@@ -1,10 +1,11 @@
 #!/bin/bash
 
 set -e
+set -x  # Enable debug mode
 
 # Variables
 DOMAIN="arvitrage.pauservices.top"
-EMAIL="paumat17@gmail.com" 
+EMAIL="paumat17@gmail.com"
 APP_DIR="/home/ubuntu/arvitrage_bot_api"
 CONFIG="/home/ubuntu/scripts/config.json"
 
@@ -19,10 +20,8 @@ NGINX_ENABLED_DIR="/etc/nginx/sites-enabled"
 NGINX_CONF="$NGINX_CONF_DIR/fundy_api"
 
 # Ensure directories
-sudo mkdir -p $NGINX_CONF_DIR $NGINX_ENABLED_DIR
-if [ ! -d "$SECURITY_PATH" ]; then
-    mkdir -p "$SECURITY_PATH"
-fi
+sudo mkdir -p "$NGINX_CONF_DIR" "$NGINX_ENABLED_DIR"
+mkdir -p "$SECURITY_PATH"
 
 # Generate keys if needed
 if [ ! -f "$PRIVATE_KEY" ]; then
@@ -38,16 +37,20 @@ fi
 # Stop and remove existing container
 docker container stop "$CONTAINER_NAME" >/dev/null 2>&1 || true
 docker container rm "$CONTAINER_NAME" >/dev/null 2>&1 || true
+
+# Update API flag in config if config exists
 if [ -f "$CONFIG" ]; then
     jq '.api = false' "$CONFIG" > temp.json && mv temp.json "$CONFIG"
 fi
 
 # Update packages and install Nginx, Certbot
 sudo apt-get update -y
-sudo apt-get install -y nginx certbot python3-certbot-nginx
+sudo apt-get install -y nginx certbot python3-certbot-nginx jq
 
 # Allow Nginx through firewall if UFW is enabled
-sudo ufw allow 'Nginx Full' || true
+if sudo ufw status | grep -q "Status: active"; then
+    sudo ufw allow 'Nginx Full' || true
+fi
 
 # Build Docker image
 cd "$APP_DIR" || exit 1
@@ -81,10 +84,10 @@ sudo systemctl restart nginx
 
 # Obtain SSL certificate using HTTP-01 challenge
 if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
-    sudo certbot --nginx -d $DOMAIN -d www.$DOMAIN --non-interactive --agree-tos -m $EMAIL
+    sudo certbot --nginx -d "$DOMAIN" -d "www.$DOMAIN" --non-interactive --agree-tos -m "$EMAIL"
 fi
 
-# Now that we have the certificate, reconfigure Nginx to only listen on HTTPS (443)
+# Reconfigure Nginx to only listen on HTTPS (443)
 sudo bash -c "cat > $NGINX_CONF" <<EOL
 server {
     listen 443 ssl;
@@ -110,15 +113,11 @@ sudo nginx -t
 sudo systemctl reload nginx
 
 # Update the API flag in config
-if [ -f "$CONFIG" ]; then
-    if [[ -s "$CONFIG" ]]; then
-        API=$(jq -r '.api' "$CONFIG")
-        if [[ "$API" == "false" ]]; then
-            jq '.api = true' "$CONFIG" > temp.json && mv temp.json "$CONFIG"
-        fi
+if [ -f "$CONFIG" ] && [ -s "$CONFIG" ]; then
+    API=$(jq -r '.api' "$CONFIG")
+    if [ "$API" == "false" ]; then
+        jq '.api = true' "$CONFIG" > temp.json && mv temp.json "$CONFIG"
     fi
 fi
 
-
 echo "Setup complete. Your application should now be accessible exclusively via https://$DOMAIN/ (port 443 only)."
-
